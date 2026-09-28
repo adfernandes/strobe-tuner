@@ -27,10 +27,7 @@ import "../core"
 
 texture_atlas: Texture
 
-// position can serve as an ID for slider controls
-active_slider_position: [2]f32 = {}
-
-// an active dropdown menu or slider dragging should not trigger other GUI controls
+// an active dropdown menu should not trigger other GUI controls
 exclusive_control_mode := false
 
 text_color_dark := hex(0x15141BFF)
@@ -140,101 +137,56 @@ gui_strobe_partial :: proc(
 }
 
 
-gui_note_detection_mode_toggle :: proc(
-    position: [2]f32,
-    active_detection_mode: NoteDetectionMode,
-) -> (
-    NoteDetectionMode,
-    bool,
-) {
-    tex_src: Rect
-    label: cstring
-    label_pos: [2]f32
+// The note name is a button that toggles the lock, a locked note shows arrows below it to step by a semitone
+gui_note_lock :: proc(pos: [2]f32, locked: bool) -> (toggled: bool, step: int) {
+    toggled = gui_button({pos.x, pos.y, 112, 116})
 
-    if active_detection_mode == .AUTO {
-        tex_src = Rect{0, 48, 240, 48}
-        label = "AUTO"
-        label_pos = [2]f32{position.x + 42.0, position.y + 5}
-    } else {
-        tex_src = Rect{0, 0, 240, 48}
-        label = "MANUAL"
-        label_pos = [2]f32{position.x + 34.0, position.y + 5}
+    if locked {
+        prev := Rect{pos.x, pos.y + 116, 32, 32}
+        next := Rect{pos.x + 48, pos.y + 116, 32, 32}
+        draw_text(font_store.medium_32, "◀", {prev.x + 8, prev.y + 8}, 16, 0, hex(0x82E2FFFF))
+        draw_text(font_store.medium_32, "▶︎", {next.x + 8, next.y + 8}, 16, 0, hex(0x82E2FFFF))
+        if gui_button(prev) do step = -1
+        if gui_button(next) do step = 1
     }
 
-    // rounded button texture
-    draw_texture(texture_atlas, tex_src, Rect{position.x, position.y, 120, 24})
-    draw_text(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
-
-    if gui_button({position.x, position.y, 120, 24}) {
-        if active_detection_mode == .AUTO do return .MANUAL, true
-        else do return .AUTO, true
-    }
-
-    return active_detection_mode, false
+    return
 }
 
 
-gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
-    gui_slider(position, value, 0.001, 0.05)
-    // Draw the crosshair icon
-    draw_texture(texture_atlas, Rect{32, 192, 32, 32}, Rect{position.x + 6, position.y + 4, 16, 16})
+// Strobe speeds per cent of detuning, precision spins 4× faster for the final adjustment
+RESPONSE_SPEEDS :: [2]f32{0.0125, 0.05}
+RESPONSE_LABELS :: [2]cstring{"CALM", "PRECISION"}
+
+gui_response_toggle :: proc(position: [2]f32, speed: f32) -> (f32, bool) {
+    speeds := RESPONSE_SPEEDS
+    labels := RESPONSE_LABELS
+
+    // The config can hold any speed, show the closest step
+    step := 0
+    for s, i in speeds {
+        if abs(math.log2(s / speed)) < abs(math.log2(speeds[step] / speed)) do step = i
+    }
+
+    width: f32 = 146
+    label_width := measure_text(font_store.medium_28, labels[step], 14, 1).x
+
+    // rounded button texture
+    draw_texture(texture_atlas, Rect{240, 96, width * 2, 48}, Rect{position.x, position.y, width, 24})
     draw_text(
         font_store.medium_28,
-        "SENSITIVITY", // speed ?
-        [2]f32{position.x + 32.0, position.y + 5},
+        labels[step],
+        {position.x + (width - label_width) / 2, position.y + 5},
         14,
         1,
         text_color_dark,
     )
-}
 
-
-// assumes value is between 0 & 1
-gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
-    value^ = clamp(value^, min, max)
-    fraction := (value^ - min) / (max - min)
-
-    mouse_point := mouse_position()
-
-    width: f32 = 146
-    height: f32 = 24
-
-    bounds := Rect{position.x, position.y, width, height}
-
-    // use position to determine if this is the active slider
-    is_active := active_slider_position.x == position.x && active_slider_position.y == position.y
-
-    if exclusive_control_mode && is_active {
-        // still dragging
-        if mouse_down() {
-            fraction = clamp(mouse_point.x - position.x, 0, width) / width
-            value^ = math.lerp(min, max, fraction)
-        } else {
-            exclusive_control_mode = false
-            active_slider_position = {}
-        }
-    } else if point_in_rect(mouse_point, bounds) {
-        // start drag
-        if !exclusive_control_mode && mouse_down() {
-            exclusive_control_mode = true
-            active_slider_position = position
-            fraction = clamp(mouse_point.x - position.x, 0, width) / width
-            value^ = math.lerp(min, max, fraction)
-        } else {
-            wheel := mouse_wheel()
-            if wheel != 0 {
-                fraction = clamp(fraction - wheel * 0.05, 0, 1)
-                value^ = math.lerp(min, max, fraction)
-            }
-        }
+    if gui_button({position.x, position.y, width, 24}) {
+        return speeds[(step + 1) % len(speeds)], true
     }
 
-    slider_position: f32 = fraction * width
-
-    // Draw the slider background
-    draw_texture(texture_atlas, Rect{240, 48, width * 2, height * 2}, Rect{position.x, position.y, width, height})
-    // Draw the filled (highlighted) area
-    draw_texture(texture_atlas, Rect{240, 96, slider_position * 2, height * 2}, Rect{position.x, position.y, slider_position, height})
+    return speed, false
 }
 
 gui_button :: proc(bounds: Rect) -> bool {

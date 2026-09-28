@@ -17,20 +17,19 @@ A simple stroboscopic instrument tuner.
 
 - Automatic pitch detection based on NSDF (McLeod Pitch Method).
 - Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality, no contrast or gain to set.
-- Manual target note selection.
+- Note lock: tap the note to keep the strobe on that note name, the octave still follows the detected pitch.
 - Harmonic mode: shows the partials of the detected note across multiple strobe bands.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
-- Strobe sensitivity (speed) slider.
+- Strobe response toggle (calm / precision): how fast the strobe spins per cent of detuning.
 - Hertz/Cents display.
 
 
 
 ### Keyboard shortcuts
-- <kbd>←</kbd><kbd>→</kbd> &nbsp;  left/right arrow to move selected note up or down chromatically.
-- <kbd>↑</kbd><kbd>↓</kbd> &nbsp;  up/down arrow to move selected note up and down by octave.
+- <kbd>space</kbd> &nbsp; lock or unlock the note.
+- <kbd>←</kbd><kbd>→</kbd> &nbsp;  lock the note and move it down or up by a semitone.
 - <kbd>tab</kbd> &nbsp;  switch the strobe display type to a full wheel.
 - <kbd>G</kbd> &nbsp;  cycle the lamp glow on the strobe: amber, red, off.
-- <kbd>space</kbd> &nbsp; switch note detection modes between auto & manual.
 
 
 

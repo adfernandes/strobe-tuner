@@ -38,21 +38,9 @@ PartialLabelType :: enum {
     NOTE_NAMES,
 }
 
-NoteDetectionMode :: enum {
-    AUTO,
-    MANUAL,
-}
-
-
 StrobeDisplayType :: enum {
     CURVED_TRACKS,
     SPINNING_WHEEL,
-}
-
-TuningPreset :: enum {
-    CHROMATIC,
-    GUITAR_STD,
-    UKULELE_STD,
 }
 
 
@@ -83,9 +71,6 @@ Config :: struct {
     // if multiple strobe bands, this sensitivity multiplier will be applied to subsequent spinning bands
     speed_multiplier:             f32,
 
-    // auto detection vs manual selection of note to track
-    note_detection_mode:          NoteDetectionMode,
-
     // How to render the strobe effect
     strobe_display_type:          StrobeDisplayType,
 
@@ -99,8 +84,6 @@ Config :: struct {
     // lamp-lit look of the old mechanical strobe tuners, see GLOW_PRESETS
     strobe_glow:                  GlowPreset,
     prevent_strobe_octave_jumps:  bool,
-
-    tuning_preset:                TuningPreset,
 
     // show different type of partial labels, eg partial number 1x, note name A2, or frequency 110Hz
     partial_labels:               PartialLabelType,
@@ -134,8 +117,7 @@ config_defaults :: Config {
     pitch_detect_fft_size        = 8192,
     samplerate                   = 48_000,
     strobe_mode                  = .HARMONIC_MODE,
-    note_detection_mode          = .AUTO,
-    strobe_speed                 = 0.025,
+    strobe_speed                 = 0.0125,
     speed_multiplier             = 2.0,
     strobe_display_type          = .CURVED_TRACKS,
     strobe_colorway              = .VIBRANT_RED,
@@ -149,7 +131,6 @@ config_defaults :: Config {
     strobe_color_2               = 0x0,
 
     //
-    tuning_preset                = .CHROMATIC,
     partial_labels               = .MULTIPLES,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,

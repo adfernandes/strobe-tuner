@@ -342,3 +342,22 @@ cents_deviation :: proc(freq_1_hz: f32, freq_2_hz: f32) -> f32 {
 octave_apart :: proc(a: Note, b: Note) -> bool {
     return math.abs(a.cents - b.cents) == 1200
 }
+
+// The note with the given name (C = 0 ... B = 11) closest to `note`, within half an octave
+nearest_note_named :: proc(note: Note, semitone_index: int) -> Note {
+    diff := (semitone_index - note.semitone_index) %% 12
+    if diff > 6 do diff -= 12
+    return cents_to_note(f32(note.cents + diff * 100), note.pitch_standard)
+}
+
+@(test)
+test_nearest_note_named :: proc(t: ^testing.T) {
+    // E locked, A2 detected: E2 is 5 semitones down, E3 is 7 up
+    note := nearest_note_named(find_note(110), 4)
+    testing.expect_value(t, note.name, 'E')
+    testing.expect_value(t, note.octave, 2)
+
+    // E locked, B2 detected: E3 is 5 semitones up
+    note = nearest_note_named(find_note(123.47), 4)
+    testing.expect_value(t, note.octave, 3)
+}

@@ -1,0 +1,44 @@
+# Layout
+
+`layout.odin` works out where everything goes every frame, from the window size and the safe area (in points).
+A window taller than 1.3× its width gets the portrait layout, anything else the desktop one.
+
+## Rules
+
+- Points, not pixels. Both backends draw in points and scale to the display's pixel density.
+- Lay out inside the safe area (clear of the Dynamic Island and the home indicator), but let the strobe
+  background run up behind the notch so it doesn't look boxed in.
+- Controls sit at the bottom of the portrait layout, within thumb reach.
+
+## Desktop
+
+The original fixed layout, 488×532.
+
+## Portrait phone
+
+```
+┌──────────────────────┐
+│   (safe-area top)    │  strobe background runs up behind the notch
+│                      │
+│   STROBE  ~50%       │  3 bands, scaled up 1–1.4× to fill half the safe area
+│                      │
+├──────────────────────┤
+│  C₄    Hz    Cents   │  note + readout, same as desktop, tap the note to lock it
+│  ◀ ▶                 │  semitone steps, only while the note is locked
+│                      │
+│  [HARMONIC] [ RESP ] │  strobe mode, response
+│  ▬▬               🐞  │  level meter, feedback
+│  (home indicator)    │
+└──────────────────────┘
+```
+
+- No mic picker, iOS routes the input itself.
+- Debug stats only with `-define:DEBUG_STATS=true`.
+
+## Later
+
+- Touch: tap the bands to switch between the curved tracks and the full wheel.
+- Swipes on the strobe to step a locked note by semitones.
+- Bigger touch targets, at least 44pt. The pill buttons are 24pt tall.
+- Scale the note readout and fonts from the short side of the screen.
+- Landscape and iPad.

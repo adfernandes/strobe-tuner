@@ -27,10 +27,8 @@ Layout :: struct {
     note:           [2]f32,
     measurements:   [2]f32,
     stats:          [2]f32,
-    speed_slider:   [2]f32,
+    response:       [2]f32,
     strobe_mode:    [2]f32,
-    detection_mode: [2]f32,
-    tuning_preset:  [2]f32,
     audio_device:   [2]f32, // desktop only, iOS picks the input itself
     level_meter:    [2]f32,
     feedback:       [2]f32,
@@ -52,10 +50,8 @@ desktop_layout :: proc() -> (l: Layout) {
     l.note = {16, 303}
     l.measurements = {147, 323}
     l.stats = {250, 400}
-    l.speed_slider = {330, 352}
     l.strobe_mode = {16, 456}
-    l.detection_mode = {148, 456}
-    l.tuning_preset = {278, 456}
+    l.response = {148, 456}
     l.audio_device = {12, 496}
     l.level_meter = {264, 507}
     l.feedback = {461, 504}
@@ -82,9 +78,7 @@ portrait_layout :: proc(window: [2]f32, safe: Rect) -> (l: Layout) {
     l.level_meter = {left, bottom - 10}
     l.feedback = {right - 16, bottom - 16}
     l.strobe_mode = {left, bottom - 60}
-    l.detection_mode = {left + 132, bottom - 60}
-    l.speed_slider = {left, bottom - 104}
-    l.tuning_preset = {right - 140, bottom - 104}
+    l.response = {left + 132, bottom - 60}
     l.audio_device = {left, bottom - 24}
     return
 }
