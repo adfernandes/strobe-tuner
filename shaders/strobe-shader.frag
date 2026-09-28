@@ -44,7 +44,8 @@ uniform float lamp_spread; // angular width of the lamp hotspot in radians
 uniform vec3 glow_color;
 uniform float glow_exposure; // how hard the lamp drives the exposure curve, higher washes lit stripes out
 uniform float glow_saturation; // 1 keeps the full color, lower mixes in gray
-uniform float amp;
+uniform float amp; // stripe sharpness
+uniform float visibility; // 0..1, fades the stripes out when the signal is buried in noise
 uniform float norm_freq;
 uniform float band_height;
 uniform float err_cents;
@@ -72,10 +73,10 @@ float generate_signal(
     } else {
         value = amplitude * sign(sinewave);
     }
+    value = visibility * clamp(value, -1.0, 1.0);
 
     // convert from range -1..1 to 0..1
     value = 0.5 * value + 0.5;
-    value = max(min(value, 1.0), 0.0);
 
     return value;
 }

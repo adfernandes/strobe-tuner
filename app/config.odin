@@ -83,9 +83,6 @@ Config :: struct {
     // if multiple strobe bands, this sensitivity multiplier will be applied to subsequent spinning bands
     speed_multiplier:             f32,
 
-    // contrast or gain of the strobe wheel, higher contrast will amplify the signal to make the stripes more prominent
-    strobe_contrast:              f32,
-
     // auto detection vs manual selection of note to track
     note_detection_mode:          NoteDetectionMode,
 
@@ -113,20 +110,13 @@ Config :: struct {
     pitch_detection_clarity_high: f32,
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
+    rms_quiet_threshold:          f32,
 
     // number of consecutive pitch detections of a new note before the strobe switches to it
     note_switch_confirmations:    int,
 
     // high-pass filter on the input to remove DC and low frequency rumble, 0 to disable
     highpass_cutoff_hz:           f32,
-
-    // AGC settings
-    auto_gain_control:            bool,
-    auto_gain_snr_db_low:         f32,
-    auto_gain_snr_db_high:        f32,
-    max_auto_gain:                f32,
-    gain_release_coefficient:     f32,
-    rms_quiet_threshold:          f32,
 
     // Average 3 DFTs to get more stable phase/mag tracking
     use_phase_average:            bool,
@@ -147,7 +137,6 @@ config_defaults :: Config {
     note_detection_mode          = .AUTO,
     strobe_speed                 = 0.025,
     speed_multiplier             = 2.0,
-    strobe_contrast              = 1000.0,
     strobe_display_type          = .CURVED_TRACKS,
     strobe_colorway              = .VIBRANT_RED,
     strobe_blur                  = true,
@@ -166,14 +155,9 @@ config_defaults :: Config {
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 2, // dB
+    rms_quiet_threshold          = 0.01, // -40dBFS
     note_switch_confirmations    = 3, // ~150ms at 20 detections per second, the last one must be strong
     highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower it for bass
-    auto_gain_control            = false,
-    auto_gain_snr_db_low         = 30, // dB
-    auto_gain_snr_db_high        = 50, // dB
-    max_auto_gain                = 1000.0,
-    gain_release_coefficient     = 0.1,
-    rms_quiet_threshold          = 0.01, // -40dBFS
     use_phase_average            = true,
     show_band_cents              = false,
 }

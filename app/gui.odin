@@ -158,35 +158,6 @@ gui_strobe_partial :: proc(
 }
 
 
-gui_agc_toggle :: proc(position: [2]f32, agc_on: bool, state_active: bool) -> (bool, bool) {
-    bounds := rl.Rectangle{position.x, position.y, 35, 14}
-    button_color := rl.GetColor(window_bg_color)
-
-    if agc_on {
-        if state_active {
-            button_color = rl.GetColor(0xF694FFFF)
-        } else {
-            button_color = rl.GetColor(0x82E2FFFF)
-        }
-    }
-
-    rl.DrawRectangleRounded(bounds, 0.5, 6, button_color)
-    rl.DrawTextEx(
-        font_store.medium_28,
-        "AGC",
-        {position.x + 5, position.y},
-        14,
-        0,
-        rl.GetColor(strobe_bg_color),
-    )
-
-    if gui_button(bounds) {
-        return !agc_on, true
-    }
-
-    return agc_on, false
-}
-
 gui_note_detection_mode_toggle :: proc(
     position: [2]f32,
     active_detection_mode: NoteDetectionMode,
@@ -227,27 +198,6 @@ gui_note_detection_mode_toggle :: proc(
     return active_detection_mode, false
 }
 
-
-gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
-    gui_slider(position, value, 0.0, 7.0)
-    // Draw the contrast icon
-    rl.DrawTexturePro(
-        texture_atlas,
-        rl.Rectangle{0, 192, 32, 32},
-        rl.Rectangle{position.x + 6, position.y + 4, 16, 16},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
-    rl.DrawTextEx(
-        font_store.medium_28,
-        "CONTRAST",
-        rl.Vector2{position.x + 32.0, position.y + 5},
-        14,
-        1,
-        text_color_dark,
-    )
-}
 
 gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
     gui_slider(position, value, 0.001, 0.05)

@@ -45,7 +45,6 @@ StrobeDisplay :: struct {
     position:              [2]f32,
     colors:                [2]rl.Color,
     background:            rl.Color,
-    contrast:              f32,
 
     // strobe shader uniform locations
     color_a_loc:           i32,
@@ -61,6 +60,7 @@ StrobeDisplay :: struct {
     glow_exposure_loc:     i32,
     glow_saturation_loc:   i32,
     amp_loc:               i32,
+    visibility_loc:        i32,
     norm_freq_loc:         i32,
     bounding_rect_loc:     i32,
     curvature_radius_loc:  i32,
@@ -81,8 +81,10 @@ StrobeDisplay :: struct {
 
     // shadow shader uniform locations
     shadow_dimensions_loc: i32,
-    auto_gain_active:      [core.MAX_BANDS]bool,
-    auto_gain:             [core.MAX_BANDS]f32,
+
+    // per band stripe sharpness and visibility, smoothed so they don't flicker, see update_band_look
+    band_amp:              [core.MAX_BANDS]f32,
+    band_visibility:       [core.MAX_BANDS]f32,
 }
 
 
@@ -91,20 +93,15 @@ init_strobe_display :: proc(
     size: [2]i32,
     colors: [2]u32,
     background: u32,
-    contrast: f32,
     display_type: StrobeDisplayType,
 ) -> (
     self: StrobeDisplay,
 ) {
-    for i in 0 ..< len(self.auto_gain) {
-        self.auto_gain[i] = 1.0
-    }
     self.texture_width = i32(size.x)
     self.texture_height = i32(size.y)
     self.position = position
     self.colors = {rl.GetColor(colors.x), rl.GetColor(colors.y)}
     self.background = rl.GetColor(background)
-    self.contrast = contrast
 
     // We need this to draw the fragment shader
     texture_image := rl.GenImageColor(
@@ -133,6 +130,7 @@ init_strobe_display :: proc(
     self.glow_exposure_loc = rl.GetShaderLocation(self.strobe_shader, "glow_exposure")
     self.glow_saturation_loc = rl.GetShaderLocation(self.strobe_shader, "glow_saturation")
     self.amp_loc = rl.GetShaderLocation(self.strobe_shader, "amp")
+    self.visibility_loc = rl.GetShaderLocation(self.strobe_shader, "visibility")
     self.norm_freq_loc = rl.GetShaderLocation(self.strobe_shader, "norm_freq")
     self.bounding_rect_loc = rl.GetShaderLocation(self.strobe_shader, "bounding_rect")
     self.curvature_radius_loc = rl.GetShaderLocation(self.strobe_shader, "curvature_radius")
@@ -161,12 +159,7 @@ init_strobe_display :: proc(
     return
 }
 
-setup_strobe_display :: proc(
-    self: ^StrobeDisplay,
-    contrast: f32,
-    display_type: StrobeDisplayType,
-) {
-    self.contrast = contrast
+setup_strobe_display :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) {
     self.display_type = display_type
 }
 
@@ -517,6 +510,39 @@ draw_strobe_display :: proc(
 
 // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
 @(private)
+// The stripe edges are as sharp as the phase is certain: a sharp edge on a jittery phase twitches,
+// a soft edge on a clean one looks washed out. The shader draws amp * sin(phase), so an edge spans
+// about 2 / amp radians of the strobe phase, keep that a few standard deviations of the phase wide.
+STROBE_EDGE_SIGMAS :: 3.0
+STROBE_MAX_AMP :: 50.0 // limit, to avoid jagged edges in the strobe display
+// The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)
+STROBE_FADE_SNR_DB :: [2]f32{8, 16}
+STROBE_LOOK_TIME_S :: 0.05
+
+@(private)
+update_band_look :: proc(
+    self: ^StrobeDisplay,
+    band: ^core.PhaseBand,
+    band_idx: int,
+    period_count: f32,
+) -> (
+    amp: f32,
+    visibility: f32,
+) {
+    // Uncertainty of the phase as drawn on the screen
+    sigma := band.phase_sigma * band.speed * period_count
+    target_amp := clamp(2.0 / (STROBE_EDGE_SIGMAS * max(sigma, 1e-6)), 1.0, STROBE_MAX_AMP)
+
+    fade := STROBE_FADE_SNR_DB
+    target_visibility := math.smoothstep(fade[0], fade[1], band.snr_db)
+
+    alpha := 1.0 - math.exp(-rl.GetFrameTime() / STROBE_LOOK_TIME_S)
+    self.band_amp[band_idx] += alpha * (target_amp - self.band_amp[band_idx])
+    self.band_visibility[band_idx] += alpha * (target_visibility - self.band_visibility[band_idx])
+
+    return self.band_amp[band_idx], self.band_visibility[band_idx]
+}
+
 draw_strobe_bands :: proc(
     self: ^StrobeDisplay,
     phase_info: ^core.PhaseComparator,
@@ -587,30 +613,14 @@ draw_strobe_bands :: proc(
             rl.ShaderUniformDataType.FLOAT,
         )
 
-        amp := self.contrast * band.amp
-
-        self.auto_gain_active[band_idx] = core.schmitt_trigger(
-            self.auto_gain_active[band_idx],
-            band.snr_db,
-            config.auto_gain_snr_db_low,
-            config.auto_gain_snr_db_high,
-        )
-        if self.auto_gain_active[band_idx] {
-            self.auto_gain[band_idx] = clamp(1.0 / band.amp, 0, config.max_auto_gain)
-        } else {
-            // Slowly release gain with exponential decay
-            self.auto_gain[band_idx] +=
-                config.gain_release_coefficient * (1.0 - self.auto_gain[band_idx])
-        }
-
-        if config.auto_gain_control {
-            amp *= self.auto_gain[band_idx]
-        }
-
-        // limit max amp to avoid jagged edges in the strobe display
-        amp = clamp(amp, 0.0, 50.0)
-
+        amp, visibility := update_band_look(self, &band, band_idx, period_count)
         rl.SetShaderValue(self.strobe_shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
+        rl.SetShaderValue(
+            self.strobe_shader,
+            self.visibility_loc,
+            &visibility,
+            rl.ShaderUniformDataType.FLOAT,
+        )
 
         rl.SetShaderValue(
             self.strobe_shader,

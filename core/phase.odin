@@ -60,6 +60,13 @@ ONSET_ENVELOPE_TIME_S :: 0.3
 ONSET_HOLD_S :: 0.1 // extra time after the attack reaches the window centre
 ONSET_MIN_MEASUREMENT_VAR :: 0.05 // rad²
 
+// Band noise floor, i.e. the level of the background noise at the band frequency.
+// It follows the level (in dB) while nothing louder is playing, and slowly creeps up during a note,
+// so it can still catch up with a noisier environment.
+NOISE_FLOOR_TIME_S :: 0.5
+NOISE_FLOOR_RISE_DB_PER_S :: 1.0
+NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known yet
+
 
 StrobeMode :: enum {
     HARMONIC_MODE, // each track display a harmonic frequency
@@ -82,12 +89,14 @@ PhaseBand :: struct {
     phase_diff:                   f32, // strobe phase advance since the previous frame (normalized to STROBE_REFERENCE_HZ)
     err_cents:                    f32,
     scaled_phase:                 f32, // phase scaled based on desired strobe speed
+    phase_sigma:                  f32, // uncertainty (std dev) of the tracked phase, same scale as phase_diff
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     speed:                        f32,
     snr_db:                       f32,
     noise_floor:                  f32,
     noise_floor_snr_db_threshold: f32,
+    noise_floor_warmup:           f32, // seconds left of following the level ungated
 
     // Lock-in reference oscillator frequency, radians per sample
     ref_omega:                    f64,
@@ -153,7 +162,7 @@ init_phase_comparator :: proc(
             band.interval = interval
             band.dft_config = init_dft(MAX_WINDOW_SIZE)
             band.intp_dft_config = init_intp_dft(MAX_WINDOW_SIZE)
-            band.noise_floor = 10e-6
+            band.noise_floor_warmup = NOISE_FLOOR_WARMUP_S
             band.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
 
             append(&self.bands, band)
@@ -239,7 +248,7 @@ set_phase_comparator_freq :: proc(
     for &band, i in self.bands {
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
-        band.noise_floor = 10e-6
+        // NOTE: keep the noise floor, the background noise doesn't change with the note
         band.tracker = {}
         band.envelope = 0.0
         band.onset_hold = 0
@@ -261,6 +270,14 @@ set_phase_comparator_freq :: proc(
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
             set_intp_dft_freq(&band.intp_dft_config, window_size, band.freq_hz, self.samplerate, 5)
         }
+    }
+}
+
+// Relearn the background noise, e.g. after switching the input device
+reset_phase_noise_floor :: proc(self: ^PhaseComparator) {
+    for &band in self.bands {
+        band.noise_floor = 0
+        band.noise_floor_warmup = NOISE_FLOOR_WARMUP_S
     }
 }
 
@@ -377,6 +394,7 @@ determine_band_phase :: proc(
         // No advance on the first frame after a reset, the initial phase is arbitrary.
         phase_advance := band.tracker.phase - prev_phase if was_active else 0
         band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
+        band.phase_sigma = f32(math.sqrt(band.tracker.p[0, 0]) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
 
         // Frequency estimation from the tracked frequency offset
         band.freq_diff_hz = f32(band.tracker.omega * f64(self.samplerate) / math.TAU)
@@ -390,6 +408,7 @@ determine_band_phase :: proc(
         base_band := self.bands[0]
         band.amp = base_band.amp
         band.phase_diff = base_band.phase_diff
+        band.phase_sigma = base_band.phase_sigma
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
     }
 }
@@ -474,14 +493,22 @@ update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_i
             EPS :: 1e-8 // to avoid divide by zero
             band.snr_db = 20.0 * math.log10((band.amp + EPS) / (band.noise_floor + EPS))
 
-            // Pause updating when signal is loud, based on an SNR threshold
-            if band.snr_db < band.noise_floor_snr_db_threshold {
-                if band.amp < band.noise_floor {
-                    band.noise_floor = band.amp
-                } else {
-                    ALPHA: f32 : 0.01
-                    band.noise_floor += ALPHA * (band.amp - band.noise_floor)
-                }
+            dt := f32(self.available) / self.samplerate
+
+            // The window starts out on the silence the sample buffer is filled with
+            window_full := self.sample_clock >= i64(band.dft_config.window_size)
+            if window_full do band.noise_floor_warmup = max(band.noise_floor_warmup - dt, 0)
+
+            if band.noise_floor == 0 {
+                band.noise_floor = band.amp
+            } else if band.noise_floor_warmup > 0 || band.snr_db < band.noise_floor_snr_db_threshold {
+                // Smooth in dB, the level of the noise in a single bin dips deep now and then
+                alpha := 1.0 - math.exp(-dt / NOISE_FLOOR_TIME_S)
+                band.noise_floor *= math.pow(10, alpha * band.snr_db / 20)
+            } else {
+                // Pause following when signal is loud, based on an SNR threshold, only creep up in case the
+                // background got louder, slow enough that a sustained note barely moves it
+                band.noise_floor *= math.pow(10, NOISE_FLOOR_RISE_DB_PER_S * dt / 20)
             }
         }
     } else {

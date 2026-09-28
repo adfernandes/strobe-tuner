@@ -16,11 +16,11 @@ A simple stroboscopic instrument tuner.
 ### Features
 
 - Automatic pitch detection based on NSDF (McLeod Pitch Method).
-- Smooth and responsive strobe display with adaptive auto-gain for consistent visual feedback across signal levels.
+- Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality, no contrast or gain to set.
 - Manual target note selection.
 - Harmonic mode: shows the partials of the detected note across multiple strobe bands.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
-- Contrast and strobe sensitivity (speed) sliders.
+- Strobe sensitivity (speed) slider.
 - Hertz/Cents display.
 
 
@@ -112,7 +112,7 @@ Core steps:
 - Frequency targeting: Compute a windowed single-bin DFT over the newest samples, precisely tuned to the reference frequency.
 - Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
 - Phase tracking: A small Kalman filter follows the phase and its rate. Each measurement is weighted by the band's signal-to-noise ratio, so a loud note is tracked closely and a fading note coasts on its last good frequency instead of wandering with the noise. Measurements taken while a fresh pluck is still inside the analysis window (when the pitch glides down from sharp) are trusted less.
-- Amplitude mapping: The signal amplitude controls brightness or contrast, making the strobe effect visually respond to signal strength.
+- Stripe sharpness: The stripe edges are as sharp as the tracked phase is certain. A sharp edge on a jittery phase twitches and a soft edge on a clean one looks washed out, so the edge width follows the tracker's phase uncertainty (scaled by the band speed). The stripes fade out as the band's SNR drops into the background noise.
 
 To maintain a consistent amount of visual drift across the frequency spectrum, the window length is based on musical pitch intervals (in cents) rather than absolute frequency, and the strobe phase is rescaled so each note spins at the same rate per cent of detuning.
 
@@ -128,9 +128,9 @@ In automatic mode a newly detected note has to be seen several times in a row (3
 - Time-aligned windowing with sub-sample frame counter - instead of resampling, this approach maintains alignment by advancing a fractional counter and rounding the number of samples per frame up or down. Still requires a bandpass filter and interpolation at display or window boundaries.
 
 
-#### Auto gain
+#### Noise floor
 
-Auto-gain (AGC) is applied to the strobe visualization to maintain visibility as the signal fades. The algorithm continuously estimates the background noise (i.e. the noise floor) and uses an SNR threshold to decide when to trigger gain adjustments. This ensures the strobe display maintains high visual contrast, even as the note loses volume.
+Each band keeps an estimate of the background noise at its frequency (i.e. the noise floor), which gives the SNR used by the phase tracker and the display. It follows the band level in dB while nothing louder is playing and pauses when the SNR is above a threshold, only creeping up slowly so it can catch up with a noisier environment. It's relearned when switching the input device.
 
 
 

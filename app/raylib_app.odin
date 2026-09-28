@@ -100,7 +100,6 @@ run_raylib_app :: proc(config: ^Config) {
         {STROBE_WIDTH, 560},
         get_strobe_colors(config),
         strobe_bg_color,
-        config.strobe_contrast,
         config.strobe_display_type,
     )
     defer destroy_strobe_display(&strobe_display)
@@ -370,16 +369,6 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range, config)
 
-            agc, agc_changed := gui_agc_toggle(
-                {445, 50},
-                config.auto_gain_control,
-                strobe_display.auto_gain_active[0],
-            )
-
-            if agc_changed {
-                config.auto_gain_control = agc
-            }
-
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
@@ -410,13 +399,10 @@ run_raylib_app :: proc(config: ^Config) {
                 core.flush_audio_capture_ringbuffer(&pitch_detector)
                 core.reset_noise_floor(&pitch_detector)
                 core.flush_audio_capture_ringbuffer(phase_comparator)
+                core.reset_phase_noise_floor(phase_comparator)
             }
 
-            setup_strobe_display(
-                &strobe_display,
-                config.strobe_contrast,
-                config.strobe_display_type,
-            )
+            setup_strobe_display(&strobe_display, config.strobe_display_type)
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
                 {16, 456},
                 config.strobe_mode,
@@ -458,10 +444,6 @@ run_raylib_app :: proc(config: ^Config) {
                     }
                 }
             }
-
-            strobe_contrast_slider_value := math.log10(config.strobe_contrast)
-            gui_contrast_slider({330, 320}, &strobe_contrast_slider_value)
-            config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
             gui_speed_slider({330, 352}, &strobe_speed_slider_value)
             if strobe_speed_slider_value != config.strobe_speed {
