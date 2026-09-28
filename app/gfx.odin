@@ -108,8 +108,8 @@ StrobeUniforms :: struct #align (16) {
     bounding_rect:    [4]f32,
     color_a:          [4]f32,
     color_b:          [4]f32,
-    glow_color:       [4]f32,
-    glow_dark_color:  [4]f32, // filter hue of the dark stripes
+    glow_filter:      [4]f32, // see glow_filter in strobe_display.odin
+    glow_dark_filter: [4]f32,
     curvature_radius: f32,
     time_stretch:     f32,
     phase:            f32,

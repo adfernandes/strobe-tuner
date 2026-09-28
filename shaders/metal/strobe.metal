@@ -30,8 +30,8 @@ struct StrobeUniforms {
     float4 bounding_rect;
     float4 color_a;
     float4 color_b;
-    float4 glow_color;
-    float4 glow_dark_color; // filter hue of the dark stripes
+    float4 glow_filter; // lamp filter, normalized and squared on the CPU, see glow_filter in strobe_display.odin
+    float4 glow_dark_filter; // the dark stripes can have a hue of their own
     float curvature_radius;
     float time_stretch;
     float phase;
@@ -205,21 +205,12 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
         // Dark stripes still pass some light, so they read as deep saturated color rather than an opaque surface.
         float lamp = mix(0.6, 1.0, hotspot) * u.glow_exposure;
 
-        // Filter hue, squared to saturate it (FF6767 -> 1.0, 0.16, 0.16)
-        float3 glow_color = u.glow_color.rgb;
-        float3 filter_color = glow_color / max(max(glow_color.r, glow_color.g), max(glow_color.b, 0.001));
-        filter_color *= filter_color;
-        // The dark stripes can have a hue of their own, e.g. the purple of the minty colors
-        float3 dark_color = u.glow_dark_color.rgb;
-        float3 dark_filter = dark_color / max(max(dark_color.r, dark_color.g), max(dark_color.b, 0.001));
-        dark_filter *= dark_filter;
-
         // Exposure curve per channel, bright light rolls off from saturated color towards pale gold/white,
         // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
         // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
         // pick up the curve's most saturated color and show up as red fringes.
-        float3 lit_rgb = 1.0 - exp(-lamp * filter_color);
-        float3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * dark_filter);
+        float3 lit_rgb = 1.0 - exp(-lamp * u.glow_filter.rgb);
+        float3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * u.glow_dark_filter.rgb);
         rgb = mix(dark_rgb, lit_rgb, lit);
         rgb = mix(float3(dot(rgb, float3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
     }

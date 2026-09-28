@@ -29,10 +29,12 @@ exclusive_control_mode := false
 
 text_color_dark := hex(0x15141BFF)
 text_color_light := hex(0xBDBDBDFF)
+text_color_white := hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
+text_color_muted := hex(0x7D7E8FFF) // the note and readout without a pitch, the ruler's neighbours
 icon_color := hex(0x9A9BAAFF)
 
 // Buttons
-pill_gray := hex(0x7D7E8FFF)
+pill_gray := text_color_muted
 pill_mint := hex(0x61FFCAFF)
 pill_violet := hex(0xA277FFFF)
 pill_yellow := hex(0xFFCA85FF)
@@ -58,7 +60,7 @@ gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: Color) -> b
 
     label_x := pos.x + LED_SIZE + LABEL_GAP
     label_width := measure_text(font_store.medium_28, label, 14, 1).x
-    draw_text(font_store.medium_28, label, {label_x, pos.y - 7}, 14, 1, settings_title_color if on else text_color_light)
+    draw_text(font_store.medium_28, label, {label_x, pos.y - 7}, 14, 1, text_color_white if on else text_color_light)
 
     // The whole of the LED and the label, a little past them on each side
     width := label_x + label_width - pos.x
@@ -124,10 +126,7 @@ NOTE_RIGHT_ARROW_INSET :: 13
 draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     if note.frequency == 0 do return
 
-    light_color := hex(0xFBFBFBFF)
-    muted_color := hex(0x7D7E8FFF)
-
-    color := light_color if freq_estimation_active else muted_color
+    color := text_color_white if freq_estimation_active else text_color_muted
 
     // Note name
     draw_text(font_store.medium_256, fmt.ctprintf("%v", note.name), pos, 128, 0, color)
@@ -155,16 +154,15 @@ gui_note_arrows :: proc(pos: [2]f32, locked: bool) -> (step: int) {
     prev := Rect{pos.x - NOTE_ARROW_SLOT, pos.y, NOTE_ARROW_SLOT, NOTE_HEIGHT}
     next := Rect{pos.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET, pos.y, NOTE_ARROW_SLOT, NOTE_HEIGHT}
 
-    // Drawn from the large font so they stay sharp on 3x screens
-    ARROW_SIZE :: 26
+    font := pixel_fonts.note_arrow
     ARROW_HEIGHT :: 18 // of the triangle itself, it sits in the middle of the line
     for arrow, i in ([2]cstring{"◀", "▶"}) {
         slot := prev if i == 0 else next
-        size := measure_text(font_store.medium_192, arrow, ARROW_SIZE, 0)
+        size := measure_text(font.font, arrow, font.size, 0)
         // Sitting on the baseline of the letter
         center_y := slot.y + NOTE_BASELINE - ARROW_HEIGHT / 2
-        position := [2]f32{slot.x + (slot.width - size.x) / 2, center_y - size.y / 2}
-        draw_text(font_store.medium_192, arrow, position, ARROW_SIZE, 0, hex(0xFBFBFBFF))
+        position := snap_to_pixels({slot.x + (slot.width - size.x) / 2, center_y - size.y / 2})
+        draw_text(font.font, arrow, position, font.size, 0, text_color_white)
     }
 
     // A finger is wider than the slots, the touch areas reach a little past them
@@ -177,7 +175,7 @@ gui_note_arrows :: proc(pos: [2]f32, locked: bool) -> (step: int) {
 
 // The chromatic ruler, all the notes in a row with the target note large in the middle.
 // The notes slide over to the next semitone, further jumps snap. The sizes don't change, the target is large wherever it is.
-// The fonts are loaded at the exact sizes, see update_ruler_fonts, and everything lands on whole pixels.
+// The fonts are loaded at the exact sizes, see update_pixel_fonts, and everything lands on whole pixels.
 
 RULER_MIN_SPACING :: 70 // between the letters of neighbouring semitones, room for a sharp between them
 RULER_CENTER_GAP :: 30 // extra room either side of the large note
@@ -213,8 +211,7 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (st
     spacing := room / f32(per_side)
 
     // The target note is white while there's a pitch, like the note without the ruler
-    muted := hex(0x7D7E8FFF)
-    note_color := hex(0xFBFBFBFF) if active else muted
+    note_color := text_color_white if active else text_color_muted
 
     // Notes slide in and out at the edges
     begin_scissor(rect)
@@ -228,12 +225,12 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (st
         x := center.x + offset * spacing + math.sign(offset) * RULER_CENTER_GAP * min(distance, 1)
 
         if k == target {
-            draw_ruler_note(note, {x, center.y}, ruler_fonts.note, ruler_fonts.note_sharp, true, note_color)
+            draw_ruler_note(note, {x, center.y}, pixel_fonts.note, pixel_fonts.note_sharp, true, note_color)
             continue
         }
 
         n := core.cents_to_note(f32(k * 100), note.pitch_standard)
-        draw_ruler_note(n, {x, center.y}, ruler_fonts.neighbour, ruler_fonts.neighbour_sharp, false, muted)
+        draw_ruler_note(n, {x, center.y}, pixel_fonts.neighbour, pixel_fonts.neighbour_sharp, false, text_color_muted)
 
         // Tapping another note locks it
         if distance <= f32(per_side) {
@@ -253,26 +250,24 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (st
 // Drawn at the fonts' own size, one texel to one pixel.
 @(private = "file")
 draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, show_octave: bool, color: Color) {
-    scale := ruler_fonts.scale
-    snap :: proc(p: [2]f32, scale: f32) -> [2]f32 {return {math.round(p.x * scale), math.round(p.y * scale)} / scale}
     size := name_font.size
 
     name := fmt.ctprintf("%v", n.name)
     name_size := measure_text(name_font.font, name, size, 0)
 
     // Centred on the letter, the sharp hangs off to the right so the letters are evenly spaced
-    top_left := snap(pos - name_size / 2, scale)
+    top_left := snap_to_pixels(pos - name_size / 2)
     draw_text(name_font.font, name, top_left, size, 0, color)
 
     right := top_left.x + name_size.x
     if n.is_accidental {
-        sharp_pos := snap({right, top_left.y + 0.1 * size}, scale)
+        sharp_pos := snap_to_pixels({right, top_left.y + 0.1 * size})
         draw_text(sharp_font.font, "♯", sharp_pos, sharp_font.size, 0, color)
     }
 
     if show_octave {
-        octave := ruler_fonts.octave
-        octave_pos := snap({right, top_left.y + name_size.y - 1.3 * octave.size}, scale)
+        octave := pixel_fonts.octave
+        octave_pos := snap_to_pixels({right, top_left.y + name_size.y - 1.3 * octave.size})
         draw_text(octave.font, fmt.ctprintf("%v", n.octave), octave_pos, octave.size, 0, color)
     }
 }
@@ -432,7 +427,6 @@ draw_measurements :: proc(
     freq_estimation_active: bool,
     out_of_range: bool,
 ) {
-    show_last := false
     hz := pitch.detected_freq
     cents := pitch.err_cents
     show_placeholder := false
@@ -446,46 +440,39 @@ draw_measurements :: proc(
         }
     }
 
-    // TODO: define a palette somewhere
-    light_color := hex(0xFBFBFBFF)
-    muted_color := hex(0x7D7E8FFF)
-
-    color := light_color if freq_estimation_active else muted_color
-    // Drawn from the large font so the values stay sharp on 3x screens
-    font := font_store.medium_48
+    color := text_color_white if freq_estimation_active else text_color_muted
+    value := pixel_fonts.readout
 
     // The right edge of each column is fixed so the digits don't shift sideways
     LABEL_SIZE :: 14
-    VALUE_SIZE :: 24
     VALUE_Y :: 18
     hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
 
-    draw_text_right(font_store.medium_32, "Hz", hz_right, LABEL_SIZE, 1, light_color)
+    draw_text_right(font_store.medium_32, "Hz", hz_right, LABEL_SIZE, 1, text_color_white)
     hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
-    draw_text_right(font, hz_str, hz_right + {0, VALUE_Y}, VALUE_SIZE, 0, color)
+    draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
 
-    draw_text_right(font_store.medium_32, "Cents", pos, LABEL_SIZE, 1, light_color)
-
-    cents_str := fmt.ctprintf("%.1f", math.abs(cents))
-    show_minus_sign := cents < 0 && cents_str != "0.0"
+    draw_text_right(font_store.medium_32, "Cents", pos, LABEL_SIZE, 1, text_color_white)
 
     if show_placeholder {
-        draw_text_right(font, "-", pos + {0, VALUE_Y}, VALUE_SIZE, 0, color)
-    } else {
-        draw_text_right(font, cents_str, pos + {0, VALUE_Y}, VALUE_SIZE, 0, color)
-        // The minus hangs to the left of the number
-        if show_minus_sign {
-            width := measure_text(font, cents_str, VALUE_SIZE, 0).x
-            draw_text_right(font, "-", pos + {-width - 2, VALUE_Y}, VALUE_SIZE, 0, color)
-        }
+        draw_text_right(value.font, "-", pos + {0, VALUE_Y}, value.size, 0, color)
+        return
+    }
+
+    cents_str := fmt.ctprintf("%.1f", math.abs(cents))
+    width := draw_text_right(value.font, cents_str, pos + {0, VALUE_Y}, value.size, 0, color)
+    // The minus hangs to the left of the number
+    if cents < 0 && cents_str != "0.0" {
+        draw_text_right(value.font, "-", pos + {-width - 2, VALUE_Y}, value.size, 0, color)
     }
 }
 
 // From the right edge of the cents column to the right edge of the Hz column
 HZ_COLUMN_OFFSET :: 100
 
-// pos is the top right of the text
-draw_text_right :: proc(font: Font, text: cstring, pos: [2]f32, size, spacing: f32, color: Color) {
+// pos is the top right of the text, returns its width
+draw_text_right :: proc(font: Font, text: cstring, pos: [2]f32, size, spacing: f32, color: Color) -> f32 {
     width := measure_text(font, text, size, spacing).x
-    draw_text(font, text, {pos.x - width, pos.y}, size, spacing, color)
+    draw_text(font, text, snap_to_pixels({pos.x - width, pos.y}), size, spacing, color)
+    return width
 }

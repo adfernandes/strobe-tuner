@@ -31,7 +31,6 @@ PITCH_STANDARD_MAX :: 480
 
 SEGMENT_WIDTH :: 60
 
-settings_title_color := hex(0xFBFBFBFF)
 settings_separator_color := hex(0x35363EFF)
 
 
@@ -46,7 +45,7 @@ gui_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    draw_text(font_store.bold_36, "Settings", l.title, 18, 1, settings_title_color)
+    draw_text(font_store.bold_36, "Settings", l.title, 18, 1, text_color_white)
 
     // 16pt icon in the middle of a larger touch area
     draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
@@ -160,7 +159,7 @@ gui_settings :: proc(
         rect := settings_row(l, row, "Reset to defaults", 2 * SEGMENT_WIDTH)
         row += 1
         draw_pill(rect, pill_gray if gui_button_held(touch_area(rect)) else pill_dark)
-        draw_centered_label("Reset", rect, settings_title_color)
+        draw_centered_label("Reset", rect, text_color_white)
         if gui_button(touch_area(rect)) {
             config^ = get_config_defaults()
             changed = true
@@ -229,7 +228,7 @@ gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: st
 
     icon_offset := [2]f32{(button_width - 16) / 2, (rect.height - 16) / 2}
     draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, icon_color)
-    draw_centered_label(fmt.ctprintf(format, value), rect, settings_title_color)
+    draw_centered_label(fmt.ctprintf(format, value), rect, text_color_white)
     draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
 
     if gui_button(touch_area(minus)) do return max(value - step, low), true

@@ -44,6 +44,19 @@ COLOR_CONTROLS :: false
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
+// Point the strobe at a new frequency with the current speed and mode
+@(private = "file")
+retune :: proc(phase_comparator: ^core.PhaseComparator, freq_hz: f32, config: ^Config) {
+    core.set_phase_comparator_freq(
+        phase_comparator,
+        freq_hz,
+        config.pitch_standard,
+        config.strobe_speed,
+        config.speed_multiplier,
+        config.strobe_mode,
+    )
+}
+
 run_app :: proc(config: ^Config) {
     target_freq_hz: f32 = config.target_freq_hz
 
@@ -123,14 +136,7 @@ run_app :: proc(config: ^Config) {
     register_audio_node(audio_capture, phase_comparator)
     start_audio_capture(audio_capture)
 
-    core.set_phase_comparator_freq(
-        phase_comparator,
-        target_freq_hz,
-        config.pitch_standard,
-        config.strobe_speed,
-        config.speed_multiplier,
-        config.strobe_mode,
-    )
+    retune(phase_comparator, target_freq_hz, config)
 
     target_note = core.find_note(target_freq_hz, config.pitch_standard)
 
@@ -174,6 +180,8 @@ run_app :: proc(config: ^Config) {
 
 
     for !gfx_should_close() {
+        // The labels and readouts are formatted into the temp allocator, nothing in it outlives a frame
+        defer free_all(context.temp_allocator)
 
         if key_pressed(.R) {
             config_changed = true
@@ -216,14 +224,7 @@ run_app :: proc(config: ^Config) {
 
             set_strobe_colors(&strobe_display, get_strobe_colors(config))
             core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
-            core.set_phase_comparator_freq(
-                phase_comparator,
-                target_note.frequency,
-                config.pitch_standard,
-                config.strobe_speed,
-                config.speed_multiplier,
-                config.strobe_mode,
-            )
+            retune(phase_comparator, target_note.frequency, config)
             config_changed = false // !!!!
         }
 
@@ -263,14 +264,7 @@ run_app :: proc(config: ^Config) {
                     if config.prevent_strobe_octave_jumps && is_octave && freq_estimation_active {
                         // DO NOTHING
                     } else {
-                        core.set_phase_comparator_freq(
-                            phase_comparator,
-                            target_note.frequency,
-                            config.pitch_standard,
-                            config.strobe_speed,
-                            config.speed_multiplier,
-                            config.strobe_mode,
-                        )
+                        retune(phase_comparator, target_note.frequency, config)
                     }
                 }
             }
@@ -319,18 +313,11 @@ run_app :: proc(config: ^Config) {
             if config.strobe_intervals_index >= len(interval_options) do config.strobe_intervals_index = 0
             config.strobe_intervals = interval_options[config.strobe_intervals_index]
             core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
-            core.set_phase_comparator_freq(
-                phase_comparator,
-                target_note.frequency,
-                config.pitch_standard,
-                config.strobe_speed,
-                config.speed_multiplier,
-                config.strobe_mode,
-            )
+            retune(phase_comparator, target_note.frequency, config)
         }
 
         layout := compute_layout(gfx_window_size(), gfx_safe_area(), config.chromatic_ruler)
-        if config.chromatic_ruler do update_ruler_fonts()
+        update_pixel_fonts()
 
         // Draw the GUI controls
         gfx_begin_frame(hex(window_bg_color))
@@ -399,15 +386,15 @@ run_app :: proc(config: ^Config) {
                     arrow_pulse_phase = 0
                 }
 
-                // Drawn from the large font so they stay sharp on 3x screens
-                ARROW_SIZE :: 22
+                arrow := pixel_fonts.strobe_arrow
                 arrow_y := layout.strobe_top + 10
                 if note_low_state {
-                    draw_text(font_store.medium_192, "◀", {layout.strobe.x + 10, arrow_y}, ARROW_SIZE, 0, arrow_color)
+                    position := snap_to_pixels({layout.strobe.x + 10, arrow_y})
+                    draw_text(arrow.font, "◀", position, arrow.size, 0, arrow_color)
                 } else if note_high_state {
-                    arrow_width := measure_text(font_store.medium_192, "▶", ARROW_SIZE, 0).x
-                    arrow_x := layout.strobe.x + layout.strobe.width - 10 - arrow_width
-                    draw_text(font_store.medium_192, "▶", {arrow_x, arrow_y}, ARROW_SIZE, 0, arrow_color)
+                    arrow_width := measure_text(arrow.font, "▶", arrow.size, 0).x
+                    position := snap_to_pixels({layout.strobe.x + layout.strobe.width - 10 - arrow_width, arrow_y})
+                    draw_text(arrow.font, "▶", position, arrow.size, 0, arrow_color)
                 }
             }
 
@@ -443,14 +430,7 @@ run_app :: proc(config: ^Config) {
                 }
             }
             if target_note.cents != prev_target_note.cents {
-                core.set_phase_comparator_freq(
-                    phase_comparator,
-                    target_note.frequency,
-                    config.pitch_standard,
-                    config.strobe_speed,
-                    config.speed_multiplier,
-                    config.strobe_mode,
-                )
+                retune(phase_comparator, target_note.frequency, config)
             }
 
             draw_measurements(
@@ -525,7 +505,7 @@ run_app :: proc(config: ^Config) {
                         layout.stats + {130, 0},
                         12,
                         0,
-                        hex(0xFBFBFBFF),
+                        text_color_white,
                     )
 
                     draw_text(
@@ -534,7 +514,7 @@ run_app :: proc(config: ^Config) {
                         layout.stats + {130, 15},
                         12,
                         0,
-                        hex(0xFBFBFBFF),
+                        text_color_white,
                     )
 
                     draw_text(
@@ -543,7 +523,7 @@ run_app :: proc(config: ^Config) {
                         layout.stats + {130, 30},
                         12,
                         0,
-                        hex(0xFBFBFBFF),
+                        text_color_white,
                     )
                 }
             }
@@ -556,7 +536,7 @@ run_app :: proc(config: ^Config) {
                     layout.stats,
                     12,
                     0,
-                    hex(0xFBFBFBFF),
+                    text_color_white,
                 )
 
                 draw_text(
@@ -565,7 +545,7 @@ run_app :: proc(config: ^Config) {
                     layout.stats + {0, 15},
                     12,
                     0,
-                    hex(0xFBFBFBFF),
+                    text_color_white,
                 )
 
 
@@ -575,7 +555,7 @@ run_app :: proc(config: ^Config) {
                     {500, 10},
                     16,
                     0,
-                    hex(0xFBFBFBFF),
+                    text_color_white,
                 )
                 if pitch_info.is_strong_pitch {
                     draw_text(

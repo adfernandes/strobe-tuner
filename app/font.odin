@@ -23,16 +23,13 @@ FontStore :: struct {
     medium_24:      Font,
     medium_28:      Font,
     medium_32:      Font,
-    medium_48:      Font,
     medium_76:      Font,
-    medium_192:     Font,
     medium_256:     Font,
 
     // Note: Inter doesn't support the sharp sign ♯
     noto_medium_96: Font,
 
     // bold
-    bold_32:        Font,
     bold_36:        Font,
 
     // Phosphor icons, see ICON_CODEPOINTS
@@ -67,24 +64,24 @@ init_fonts :: proc() {
     font_store.medium_24 = gfx_load_font(inter_medium, 24, FONT_CODEPOINTS)
     font_store.medium_28 = gfx_load_font(inter_medium, 28, FONT_CODEPOINTS)
     font_store.medium_32 = gfx_load_font(inter_medium, 32, FONT_CODEPOINTS)
-    font_store.medium_48 = gfx_load_font(inter_medium, 192, FONT_CODEPOINTS)
     font_store.medium_76 = gfx_load_font(inter_medium, 76, FONT_CODEPOINTS)
-    font_store.medium_192 = gfx_load_font(inter_medium, 192, FONT_CODEPOINTS)
     font_store.medium_256 = gfx_load_font(inter_medium, 256, FONT_CODEPOINTS)
-    font_store.bold_32 = gfx_load_font(inter_bold, 32, FONT_CODEPOINTS)
     font_store.bold_36 = gfx_load_font(inter_bold, 36, FONT_CODEPOINTS)
     font_store.noto_medium_96 = gfx_load_font(noto_sans_mono, 92, FONT_CODEPOINTS)
     font_store.icons_32 = gfx_load_font(phosphor, 32, ICON_CODEPOINTS)
     font_store.icons_72 = gfx_load_font(phosphor, 72, ICON_CODEPOINTS)
 }
 
-// The chromatic ruler's large letters are rasterized at exactly the size they're drawn at on this screen,
-// shrinking a larger atlas that much shows jagged edges. Point sizes, whole pixels at 1x, 2x and 3x.
+// The large text is rasterized at exactly the size it's drawn at on this screen, shrinking a larger atlas
+// by that much shows jagged edges. Point sizes, whole pixels at 1x, 2x and 3x.
 RULER_NOTE_SIZE :: 88 // the target note
 RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
 RULER_NOTE_SHARP_SIZE :: 48
 RULER_NEIGHBOUR_SHARP_SIZE :: 28
+READOUT_SIZE :: 24 // the Hz and cents values
+NOTE_ARROW_SIZE :: 26 // either side of the note without the ruler
+STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune
 
 // A font and the point size that draws it one texel to one pixel
 PixelFont :: struct {
@@ -92,22 +89,25 @@ PixelFont :: struct {
     size: f32,
 }
 
-RulerFonts :: struct {
+PixelFonts :: struct {
     scale:           f32, // the DPI scale they were loaded for
     note:            PixelFont,
     neighbour:       PixelFont,
     octave:          PixelFont,
     note_sharp:      PixelFont,
     neighbour_sharp: PixelFont,
+    readout:         PixelFont,
+    note_arrow:      PixelFont,
+    strobe_arrow:    PixelFont,
 }
 
-ruler_fonts: RulerFonts
+pixel_fonts: PixelFonts
 
 // Called before the frame starts, reloads when the window moves to a screen with another scale
-update_ruler_fonts :: proc() {
+update_pixel_fonts :: proc() {
     scale := gfx_dpi_scale()
-    if scale == ruler_fonts.scale do return
-    unload_ruler_fonts()
+    if scale == pixel_fonts.scale do return
+    unload_pixel_fonts()
 
     inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
     noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
@@ -116,24 +116,36 @@ update_ruler_fonts :: proc() {
         return {gfx_load_font(ttf, i32(pixels), codepoints), pixels / scale}
     }
 
-    ruler_fonts = {
+    pixel_fonts = {
         scale           = scale,
         note            = load(inter_medium, RULER_NOTE_SIZE, scale, "ABCDEFG"),
         neighbour       = load(inter_medium, RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
         octave          = load(inter_medium, RULER_OCTAVE_SIZE, scale, "0123456789"),
         note_sharp      = load(noto_sans_mono, RULER_NOTE_SHARP_SIZE, scale, "♯"),
         neighbour_sharp = load(noto_sans_mono, RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
+        readout         = load(inter_medium, READOUT_SIZE, scale, "0123456789.-"),
+        note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
+        strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
     }
 }
 
-unload_ruler_fonts :: proc() {
-    if ruler_fonts.scale == 0 do return
-    gfx_unload_font(ruler_fonts.note.font)
-    gfx_unload_font(ruler_fonts.neighbour.font)
-    gfx_unload_font(ruler_fonts.octave.font)
-    gfx_unload_font(ruler_fonts.note_sharp.font)
-    gfx_unload_font(ruler_fonts.neighbour_sharp.font)
-    ruler_fonts = {}
+unload_pixel_fonts :: proc() {
+    if pixel_fonts.scale == 0 do return
+    gfx_unload_font(pixel_fonts.note.font)
+    gfx_unload_font(pixel_fonts.neighbour.font)
+    gfx_unload_font(pixel_fonts.octave.font)
+    gfx_unload_font(pixel_fonts.note_sharp.font)
+    gfx_unload_font(pixel_fonts.neighbour_sharp.font)
+    gfx_unload_font(pixel_fonts.readout.font)
+    gfx_unload_font(pixel_fonts.note_arrow.font)
+    gfx_unload_font(pixel_fonts.strobe_arrow.font)
+    pixel_fonts = {}
+}
+
+// Whole pixels on this screen, so text drawn at a pixel font's size lands texel for pixel
+snap_to_pixels :: proc(p: [2]f32) -> [2]f32 {
+    scale := pixel_fonts.scale
+    return {math.round(p.x * scale), math.round(p.y * scale)} / scale
 }
 
 // Icon with its top left at position, 16pt unless told otherwise
@@ -146,14 +158,11 @@ destroy_fonts :: proc() {
     gfx_unload_font(font_store.medium_24)
     gfx_unload_font(font_store.medium_28)
     gfx_unload_font(font_store.medium_32)
-    gfx_unload_font(font_store.medium_48)
     gfx_unload_font(font_store.medium_76)
-    gfx_unload_font(font_store.medium_192)
     gfx_unload_font(font_store.medium_256)
-    gfx_unload_font(font_store.bold_32)
     gfx_unload_font(font_store.bold_36)
     gfx_unload_font(font_store.noto_medium_96)
     gfx_unload_font(font_store.icons_32)
     gfx_unload_font(font_store.icons_72)
-    unload_ruler_fonts()
+    unload_pixel_fonts()
 }

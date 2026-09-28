@@ -43,8 +43,8 @@ uniform float phase_step; // change of phase since the previous frame
 uniform int motion_blur;
 uniform int glow;
 uniform float lamp_spread; // angular width of the lamp hotspot in radians
-uniform vec4 glow_color;
-uniform vec4 glow_dark_color; // filter hue of the dark stripes
+uniform vec4 glow_filter; // lamp filter, normalized and squared on the CPU, see glow_filter in strobe_display.odin
+uniform vec4 glow_dark_filter; // the dark stripes can have a hue of their own, e.g. the purple of the minty colors
 uniform float glow_exposure; // how hard the lamp drives the exposure curve, higher washes lit stripes out
 uniform float glow_saturation; // 1 keeps the full color, lower mixes in gray
 uniform float amp; // stripe sharpness
@@ -211,19 +211,12 @@ void main()
         // Dark stripes still pass some light, so they read as deep saturated color rather than an opaque surface.
         float lamp = mix(0.6, 1.0, hotspot) * glow_exposure;
 
-        // Filter hue, squared to saturate it (FF6767 -> 1.0, 0.16, 0.16)
-        vec3 filter_color = glow_color.rgb / max(max(glow_color.r, glow_color.g), max(glow_color.b, 0.001));
-        filter_color *= filter_color;
-        // The dark stripes can have a hue of their own, e.g. the purple of the minty colors
-        vec3 dark_filter = glow_dark_color.rgb / max(max(glow_dark_color.r, glow_dark_color.g), max(glow_dark_color.b, 0.001));
-        dark_filter *= dark_filter;
-
         // Exposure curve per channel, bright light rolls off from saturated color towards pale gold/white,
         // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
         // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
         // pick up the curve's most saturated color and show up as red fringes.
-        vec3 lit_rgb = 1.0 - exp(-lamp * filter_color);
-        vec3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * dark_filter);
+        vec3 lit_rgb = 1.0 - exp(-lamp * glow_filter.rgb);
+        vec3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * glow_dark_filter.rgb);
         rgb = mix(dark_rgb, lit_rgb, lit);
         rgb = mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, glow_saturation);
     }

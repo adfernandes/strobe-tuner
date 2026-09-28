@@ -134,6 +134,15 @@ blur_render_targets :: proc(
     }
 }
 
+// The filter the lamp shines through, the hue scaled up to full brightness and squared to saturate it
+// (FF6767 -> 1.0, 0.16, 0.16). The same for the whole strobe, so the shader gets it ready made.
+@(private)
+glow_filter :: proc(color: u32) -> [3]f32 {
+    rgb := normalize_color(hex(color)).rgb
+    filter := rgb / max(rgb.r, rgb.g, rgb.b, 0.001)
+    return filter * filter
+}
+
 // Lift the background a little, as if some lamp light scatters behind the whole disc.
 // Based on the darkest stripe, the dark stripes of the outer band away from the hotspot,
 // mirrors the light model in the strobe shader.
@@ -143,9 +152,7 @@ glow_background :: proc(background: Color, glow: GlowParams) -> Color {
     MIN_LAMP :: 0.6
     BACKGROUND_LIFT :: 0.25
 
-    glow_color := normalize_color(hex(glow.dark_color)).rgb
-    filter := glow_color / max(glow_color.r, glow_color.g, glow_color.b, 0.001)
-    filter *= filter
+    filter := glow_filter(glow.dark_color)
 
     darkest: [3]f32
     for c, i in filter {
@@ -231,8 +238,6 @@ draw_strobe_display :: proc(
         glow            = i32(glow_enabled),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
         lamp_spread     = 1000.0 if self.display_type == .SPINNING_WHEEL else 0.45,
-        glow_color      = normalize_color(hex(glow_params.color)),
-        glow_dark_color = normalize_color(hex(glow_params.dark_color)),
         glow_exposure   = glow_params.exposure,
         glow_saturation = glow_params.saturation,
         color_a         = normalize_color(self.colors.x),
@@ -242,6 +247,8 @@ draw_strobe_display :: proc(
         // most outer radius
         max_radius      = curvature_radius + band_height * f32(len(phase_info.bands) - 1),
     }
+    uniforms.glow_filter.rgb = glow_filter(glow_params.color)
+    uniforms.glow_dark_filter.rgb = glow_filter(glow_params.dark_color)
     min_radius := uniforms.min_radius
 
     y := rect.y + rect.height - scale * STROBE_HEIGHT
