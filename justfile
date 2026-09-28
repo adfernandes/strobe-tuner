@@ -66,10 +66,10 @@ build-portaudio-win:
     Copy-Item -Path "..\portaudio\build\Release\portaudio.lib" -Destination ".\portaudio\portaudio_x64.lib"
 
 dev:
-    odin run app -debug -extra-linker-flags="-L. -framework AudioToolbox -framework CoreAudio"
+    odin run app -debug
 
 build:
-    odin build app -o:speed -microarch:native -extra-linker-flags="-L. -framework AudioToolbox -framework CoreAudio"
+    odin build app -o:speed -microarch:native
 
 # Run on Win 11
 dev-win:

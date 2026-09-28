@@ -146,16 +146,10 @@ run_raylib_app :: proc(config: ^Config) {
     audio_devices: [dynamic]GuiOption = {}
     defer delete(audio_devices)
 
-    device_count := audio_device_count()
-    for i in 0 ..< device_count {
-        info := audio_device_info(i)
-        if info.maxInputChannels > 0 {
-            append(&audio_devices, GuiOption{i, string(info.name)})
-        }
-        if i == audio_capture.active_device {
-            audio_device_dropdown_index = int(i)
-        }
+    for i in 0 ..< audio_device_count(audio_capture) {
+        append(&audio_devices, GuiOption{i, audio_device_name(audio_capture, i)})
     }
+    audio_device_dropdown_index = int(audio_capture.active_device)
 
     selected_note_idx := 0
     audio_device_dropdown_active := false

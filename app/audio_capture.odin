@@ -17,14 +17,11 @@
 package app
 
 import "base:runtime"
-import "core:c"
 import "core:fmt"
-import "core:math"
-import "core:mem"
 import "core:slice"
+import "core:strings"
 
-
-import pa "../external/odin-portaudio"
+import ma "vendor:miniaudio"
 
 import "../core"
 
@@ -33,8 +30,11 @@ import "../core"
 FILTER_CHUNK_SIZE :: 4096
 
 AudioCapture :: struct {
-    active_device:      i32,
-    stream:             ^pa.Stream,
+    ctx:                ma.context_type,
+    device:             ma.device,
+    device_open:        bool,
+    capture_infos:      []ma.device_info, // owned by ctx, valid until the next enumeration
+    active_device:      i32, // index into capture_infos
     nodes:              [dynamic]^core.AudioCaptureNode,
     samplerate:         u32,
     highpass_cutoff_hz: f32,
@@ -42,12 +42,16 @@ AudioCapture :: struct {
     filtered:           []f32, // high-passed copy of the input, shared by all nodes
 }
 
-audio_device_count :: pa.GetDeviceCount
-audio_device_info :: pa.GetDeviceInfo
+audio_device_count :: proc(self: ^AudioCapture) -> i32 {
+    return i32(len(self.capture_infos))
+}
+
+audio_device_name :: proc(self: ^AudioCapture, device_index: i32) -> string {
+    return strings.truncate_to_byte(string(self.capture_infos[device_index].name[:]), 0)
+}
 
 switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
-    err := pa.AbortStream(self.stream)
-    if check(err) do return
+    close_device(self)
 
     // Flush ring buffers to discard stale samples from the previous device
     for node in self.nodes {
@@ -58,35 +62,35 @@ switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
     self.highpass = core.init_highpass(self.highpass_cutoff_hz, f32(self.samplerate))
 
     self.active_device = device_index
-    info := pa.GetDeviceInfo(device_index)
 
-    fmt.println("Switching audio device to: ", info.name, device_index)
+    fmt.println("Switching audio device to: ", audio_device_name(self, device_index), device_index)
 
-    open_stream_on_active_device(self)
-    start_audio_capture(self)
+    if open_stream_on_active_device(self) {
+        start_audio_capture(self)
+    }
 }
 
 open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
-    stream_params := pa.StreamParameters {
-        device                    = self.active_device,
-        channelCount              = 1,
-        sampleFormat              = pa.Float32,
-        suggestedLatency          = pa.GetDeviceInfo(self.active_device).defaultLowInputLatency,
-        hostApiSpecificStreamInfo = nil,
+    config := ma.device_config_init(.capture)
+    config.capture.format = .f32
+    config.capture.channels = 1
+    config.sampleRate = self.samplerate
+    config.performanceProfile = .low_latency
+    config.noFixedSizedCallback = true // callback chunks are handled in stream_callback
+    config.dataCallback = stream_callback
+    config.pUserData = self
+
+    // Ask the OS for an unprocessed signal (no AGC / noise suppression)
+    config.aaudio.inputPreset = .unprocessed
+
+    // A nil ID lets miniaudio follow the system default device when it changes
+    info := &self.capture_infos[self.active_device]
+    if !info.isDefault {
+        config.capture.pDeviceID = &info.id
     }
 
-    err := pa.OpenStream(
-        stream = &self.stream,
-        inputParameters = &stream_params,
-        outputParameters = nil,
-        sampleRate = f64(self.samplerate),
-        framesPerBuffer = pa.FramesPerBufferUnspecified,
-        streamFlags = 0,
-        streamCallback = stream_callback,
-        userData = self,
-    )
-
-    if check(err) do return false
+    if check(ma.device_init(&self.ctx, &config, &self.device)) do return false
+    self.device_open = true
 
     fmt.println("Opened input stream")
 
@@ -94,32 +98,36 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
 }
 
 
-// TODO can't listen to default input device refresh without hotplug
-// https://github.com/PortAudio/portaudio/wiki/HotPlug
 init_audio_capture :: proc(samplerate: u32, highpass_cutoff_hz: f32) -> (bool, ^AudioCapture) {
-    err: pa.Error
-
     self := new(AudioCapture)
     self.samplerate = samplerate
     self.highpass_cutoff_hz = highpass_cutoff_hz
     self.highpass = core.init_highpass(highpass_cutoff_hz, f32(samplerate))
     self.filtered = make([]f32, FILTER_CHUNK_SIZE)
 
-    err = pa.Initialize()
-    if check(err) do return false, self
+    if check(ma.context_init(nil, 0, nil, &self.ctx)) do return false, self
 
-    fmt.println("Initialized PortAudio")
+    fmt.println("Initialized miniaudio, backend:", self.ctx.backend)
 
-    device_count := pa.GetDeviceCount()
-    self.active_device = pa.GetDefaultInputDevice()
+    infos: [^]ma.device_info
+    count: u32
+    if check(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do return false, self
+    if count == 0 {
+        fmt.println("No audio input devices found")
+        return false, self
+    }
+    self.capture_infos = infos[:count]
 
-    for i in 0 ..< device_count {
-        info := pa.GetDeviceInfo(i)
-        str := "  %v  ‣  %s (%v ch)\n"
+    for &info, i in self.capture_infos {
+        if info.isDefault do self.active_device = i32(i)
+    }
+
+    for i in 0 ..< audio_device_count(self) {
+        str := "  %v  ‣  %s\n"
         if i == self.active_device {
-            str = "  %v [‣] %s (%v ch)\n"
+            str = "  %v [‣] %s\n"
         }
-        fmt.printf(str, i, info.name, info.maxInputChannels)
+        fmt.printf(str, i, audio_device_name(self, i))
     }
 
     ok := open_stream_on_active_device(self)
@@ -129,10 +137,8 @@ init_audio_capture :: proc(samplerate: u32, highpass_cutoff_hz: f32) -> (bool, ^
 
 
 start_audio_capture :: proc(self: ^AudioCapture) -> bool {
-    err: pa.Error
-
-    err = pa.StartStream(self.stream)
-    if check(err) do return false
+    if !self.device_open do return false
+    if check(ma.device_start(&self.device)) do return false
 
     fmt.println("Started input stream")
     return true
@@ -145,20 +151,19 @@ register_audio_node :: proc(self: ^AudioCapture, node: ^core.AudioCaptureNode) {
 
 // TODO: remove node?
 
-destroy_audio_capture :: proc(self: ^AudioCapture) {
-    err: pa.Error
-
-    err = pa.AbortStream(self.stream)
-    check(err)
-    fmt.println("Stopped input stream")
-
-    err = pa.CloseStream(self.stream)
-    check(err)
+@(private)
+close_device :: proc(self: ^AudioCapture) {
+    if !self.device_open do return
+    // Stops the device and waits for any in-flight callback to finish
+    ma.device_uninit(&self.device)
+    self.device_open = false
     fmt.println("Closed input stream")
+}
 
-    err = pa.Terminate()
-    check(err)
-    fmt.println("Terminated PortAudio")
+destroy_audio_capture :: proc(self: ^AudioCapture) {
+    close_device(self)
+    ma.context_uninit(&self.ctx)
+    fmt.println("Terminated miniaudio")
 
     delete(self.nodes)
     delete(self.filtered)
@@ -167,23 +172,12 @@ destroy_audio_capture :: proc(self: ^AudioCapture) {
 
 
 @(private)
-stream_callback :: proc "c" (
-    input: rawptr,
-    output: rawptr,
-    frameCount: c.ulong,
-    timeInfo: ^pa.StreamCallbackTimeInfo,
-    statusFlags: pa.StreamCallbackFlags,
-    userData: rawptr,
-) -> int {
+stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     context = runtime.default_context()
 
-    if statusFlags & pa.InputOverflow != 0 {
-        fmt.println("PortAudio: input overflow detected (samples were dropped)")
-    }
+    input_slice: []f32 = slice.from_ptr(cast([^]f32)input, int(frame_count))
 
-    input_slice: []f32 = slice.from_ptr(cast([^]f32)input, int(frameCount))
-
-    self := cast(^AudioCapture)userData
+    self := cast(^AudioCapture)device.pUserData
 
     // High-pass once for all nodes to strip DC and low frequency rumble from the mic
     for len(input_slice) > 0 {
@@ -199,13 +193,11 @@ stream_callback :: proc "c" (
             }
         }
     }
-
-    return 0
 }
 
-check :: proc(err: pa.Error) -> bool {
-    if pa.ErrorCode(err) != .NoError {
-        fmt.println("PortAudio error: ", pa.GetErrorText(err))
+check :: proc(res: ma.result) -> bool {
+    if res != .SUCCESS {
+        fmt.println("miniaudio error: ", ma.result_description(res))
         return true
     }
     return false
