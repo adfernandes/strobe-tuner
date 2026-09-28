@@ -17,7 +17,6 @@ package app
 import "base:intrinsics"
 import "core:encoding/ini"
 import "core:fmt"
-import "core:io"
 import "core:os"
 import "core:path/filepath"
 import "core:reflect"
@@ -32,7 +31,7 @@ create_app_directory :: proc() -> Maybe(string) {
     if os.exists(dir_path) do return dir_path
 
     err := os.make_directory(dir_path)
-    if err != os.ERROR_NONE do return nil
+    if err != nil do return nil
 
     return dir_path
 }
@@ -40,7 +39,8 @@ create_app_directory :: proc() -> Maybe(string) {
 get_config_path :: proc () -> string {
     dir_path := get_config_directory(APP_NAME)
     defer delete(dir_path)
-    return filepath.join({dir_path, CONFIG_NAME})
+    path, _ := filepath.join({dir_path, CONFIG_NAME})
+    return path
 }
 
 load_ini :: proc() -> (ini.Map, bool) {
@@ -53,7 +53,7 @@ load_ini :: proc() -> (ini.Map, bool) {
     if !dir_ok do return nil, false
 
     // Load or create an ini file
-    ini_path := filepath.join({dir_path, CONFIG_NAME})
+    ini_path, _ := filepath.join({dir_path, CONFIG_NAME})
     defer delete(ini_path)
 
     if os.exists(ini_path) {
@@ -77,10 +77,11 @@ save_ini :: proc(ini_map: ini.Map) {
     dir_path, dir_ok := create_app_directory().?
     defer delete(dir_path)
 
-    ini_path := filepath.join({dir_path, CONFIG_NAME})
+    ini_path, _ := filepath.join({dir_path, CONFIG_NAME})
     defer delete(ini_path)
 
-    file, err := os.open(ini_path, os.O_WRONLY | os.O_CREATE, 0o644)
+    // Truncate so a shorter config doesn't leave stale bytes at the end of the file
+    file, err := os.open(ini_path, {.Write, .Create, .Trunc})
     if err != nil {
         fmt.println("Failed to load the config file.", ini_path)
         return
@@ -89,8 +90,8 @@ save_ini :: proc(ini_map: ini.Map) {
 
     fmt.println("Saving config to", ini_path)
 
-    stream := os.stream_from_handle(file)
-    defer io.close(stream)
+    // The stream wraps the file handle, which is closed above
+    stream := os.to_stream(file)
 
     section := ini_map[""]
 
@@ -112,23 +113,27 @@ save_ini :: proc(ini_map: ini.Map) {
 get_config_directory :: proc(app_name: string) -> string {
     when ODIN_OS == .Windows {
         // Use %APPDATA% on Windows
-        base_path := os.get_env("APPDATA")
+        base_path := os.get_env("APPDATA", context.allocator)
         defer delete(base_path)
-        return filepath.join({base_path, app_name})
+        path, _ := filepath.join({base_path, app_name})
+        return path
     } else when ODIN_OS == .Darwin {
         // macOS: ~/Library/Application Support
-        home := os.get_env("HOME")
+        home := os.get_env("HOME", context.allocator)
         defer delete(home)
-        return filepath.join({home, "Library", "Application Support", app_name})
+        path, _ := filepath.join({home, "Library", "Application Support", app_name})
+        return path
     } else {
         // Linux/Unix: ~/.config or XDG_CONFIG_HOME
-        config_home := os.get_env("XDG_CONFIG_HOME")
+        config_home := os.get_env("XDG_CONFIG_HOME", context.allocator)
         defer delete(config_home)
         if config_home == "" {
-            home := os.get_env("HOME")
-            config_home = filepath.join({home, ".config"})
+            home := os.get_env("HOME", context.allocator)
+            defer delete(home)
+            config_home, _ = filepath.join({home, ".config"})
         }
-        return filepath.join({config_home, app_name})
+        path, _ := filepath.join({config_home, app_name})
+        return path
     }
 }
 

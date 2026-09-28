@@ -19,7 +19,6 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
-import "core:path/filepath"
 import rl "vendor:raylib"
 
 import "../core"
@@ -93,11 +92,6 @@ init_strobe_display :: proc(
     )
     self.texture = rl.LoadTextureFromImage(texture_image)
     rl.UnloadImage(texture_image)
-
-
-    // File path relative to our current odin file
-    dir := filepath.dir(#file)
-    defer delete(dir)
 
     {
         frag_shader_data := #load("../shaders/strobe-shader.frag")
