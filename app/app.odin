@@ -250,7 +250,9 @@ run_app :: proc(config: ^Config) {
             if note_confirmed && detected_note.cents != pitch_info.detected_note.cents {
                 is_octave := core.octave_apart(detected_note, pitch_info.detected_note)
                 detected_note = pitch_info.detected_note
-                target_note = detected_note
+
+                // In manual mode the target stays on the selected note
+                if config.note_detection_mode == .AUTO do target_note = detected_note
 
                 // Keep the same strobe target, this is useful for some strings on guitars/basses
                 // where note rings out as a harmonic.
