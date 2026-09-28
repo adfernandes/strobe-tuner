@@ -22,7 +22,7 @@ import "core:time"
 
 import "../core"
 
-// The settings screen, opened with the cog in the bottom right corner.
+// The settings screen, opened with the sliders icon just under the strobe on the right.
 // Everything that isn't needed while tuning lives here, the main screen keeps the note lock
 // and the strobe speed.
 

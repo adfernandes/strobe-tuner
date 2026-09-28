@@ -91,6 +91,7 @@ PixelFont :: struct {
 
 PixelFonts :: struct {
     scale:           f32, // the DPI scale they were loaded for
+    ruler_scale:     f32, // the ruler's sizes relative to the desktop, see Layout
     note:            PixelFont,
     neighbour:       PixelFont,
     octave:          PixelFont,
@@ -103,10 +104,11 @@ PixelFonts :: struct {
 
 pixel_fonts: PixelFonts
 
-// Called before the frame starts, reloads when the window moves to a screen with another scale
-update_pixel_fonts :: proc() {
+// Called before the frame starts, reloads when the window moves to a screen with another scale or the
+// layout sizes the ruler differently
+update_pixel_fonts :: proc(ruler_scale: f32) {
     scale := gfx_dpi_scale()
-    if scale == pixel_fonts.scale do return
+    if scale == pixel_fonts.scale && ruler_scale == pixel_fonts.ruler_scale do return
     unload_pixel_fonts()
 
     inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
@@ -118,11 +120,12 @@ update_pixel_fonts :: proc() {
 
     pixel_fonts = {
         scale           = scale,
-        note            = load(inter_medium, RULER_NOTE_SIZE, scale, "ABCDEFG"),
-        neighbour       = load(inter_medium, RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
-        octave          = load(inter_medium, RULER_OCTAVE_SIZE, scale, "0123456789"),
-        note_sharp      = load(noto_sans_mono, RULER_NOTE_SHARP_SIZE, scale, "♯"),
-        neighbour_sharp = load(noto_sans_mono, RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
+        ruler_scale     = ruler_scale,
+        note            = load(inter_medium, ruler_scale * RULER_NOTE_SIZE, scale, "ABCDEFG"),
+        neighbour       = load(inter_medium, ruler_scale * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
+        octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
+        note_sharp      = load(noto_sans_mono, ruler_scale * RULER_NOTE_SHARP_SIZE, scale, "♯"),
+        neighbour_sharp = load(noto_sans_mono, ruler_scale * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
         readout         = load(inter_medium, READOUT_SIZE, scale, "0123456789.-"),
         note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),

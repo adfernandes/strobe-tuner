@@ -67,8 +67,24 @@ gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: Color) -> b
     return gui_button({pos.x - 12, pos.y - TOUCH_HEIGHT / 2, width + 24, TOUCH_HEIGHT})
 }
 
-gui_lock_toggle :: proc(pos: [2]f32, locked: bool) -> bool {
-    return gui_led_toggle(pos, "LOCK NOTE", locked, pill_violet)
+LOCK_BUTTON_HEIGHT :: 24
+
+// The most important toggle gets a whole button, gray while off and violet while locked. center is the
+// middle of the button.
+gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
+    LABEL :: "LOCK NOTE"
+    LABEL_SIZE :: 14
+    PADDING :: 10
+    TOUCH_HEIGHT :: 44
+
+    label_size := measure_text(font_store.medium_28, LABEL, LABEL_SIZE, 1)
+    width := label_size.x + 2 * PADDING
+    rect := Rect{center.x - width / 2, center.y - LOCK_BUTTON_HEIGHT / 2, width, LOCK_BUTTON_HEIGHT}
+
+    draw_pill(rect, pill_violet if locked else pill_gray)
+    draw_text(font_store.medium_28, LABEL, snap_to_pixels(center - label_size / 2), LABEL_SIZE, 1, text_color_dark)
+
+    return gui_button({rect.x, center.y - TOUCH_HEIGHT / 2, rect.width, TOUCH_HEIGHT})
 }
 
 
@@ -190,7 +206,7 @@ ruler_position: f32
 ruler_initialized: bool
 
 // Returns how many semitones to step when another note is tapped
-gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (step: int) {
+gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int) {
     if note.frequency == 0 do return
 
     target := note.cents / 100
@@ -205,9 +221,13 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (st
 
     center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
 
+    // The gaps grow with the letters, the fonts were loaded at the layout's size
+    s := pixel_fonts.ruler_scale
+    center_gap := s * RULER_CENTER_GAP
+
     // As many neighbours as fit, up to 2 a side, spread out to reach the edges
-    room := rect.width / 2 - RULER_EDGE - RULER_CENTER_GAP
-    per_side := clamp(int(room / RULER_MIN_SPACING), 1, RULER_MAX_PER_SIDE)
+    room := rect.width / 2 - s * RULER_EDGE - center_gap
+    per_side := clamp(int(room / (s * RULER_MIN_SPACING)), 1, RULER_MAX_PER_SIDE)
     spacing := room / f32(per_side)
 
     // The target note is white while there's a pitch, like the note without the ruler
@@ -222,7 +242,7 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (st
     for k in first ..= last {
         offset := f32(k) - ruler_position
         distance := abs(offset)
-        x := center.x + offset * spacing + math.sign(offset) * RULER_CENTER_GAP * min(distance, 1)
+        x := center.x + offset * spacing + math.sign(offset) * center_gap * min(distance, 1)
 
         if k == target {
             draw_ruler_note(note, {x, center.y}, pixel_fonts.note, pixel_fonts.note_sharp, true, note_color)
@@ -236,11 +256,6 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, locked, active: bool) -> (st
         if distance <= f32(per_side) {
             if gui_button({x - spacing / 2, rect.y, spacing, rect.height}) do step = k - target
         }
-    }
-
-    // Underlined in violet while locked
-    if locked {
-        draw_pill({center.x - 14, center.y + RULER_NOTE_SIZE / 2 + 4, 28, 3}, pill_violet)
     }
 
     return
@@ -419,9 +434,16 @@ gui_dropdown :: proc(
 }
 
 
-// Two right aligned columns, Hz and cents, pos is the top right of the cents column
+ReadoutAlign :: enum {
+    RIGHT, // the right edges of both columns are fixed, pos is the top right of the cents column
+    CENTER, // pos is the top middle of the gutter, Hz right aligned before it and cents left aligned after it
+}
+
+// Two columns, Hz and cents. Centred, the minus hangs into the gutter so the pair looks centred whatever
+// the digits.
 draw_measurements :: proc(
     pos: [2]f32,
+    align: ReadoutAlign,
     pitch: core.PitchInfo,
     last_good_pitch: core.PitchInfo,
     freq_estimation_active: bool,
@@ -443,29 +465,38 @@ draw_measurements :: proc(
     color := text_color_white if freq_estimation_active else text_color_muted
     value := pixel_fonts.readout
 
-    // The right edge of each column is fixed so the digits don't shift sideways
+    // The labels stay in the background, the values and the note are what's read
     LABEL_SIZE :: 14
     VALUE_Y :: 18
-    hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
-
-    draw_text_right(font_store.medium_32, "Hz", hz_right, LABEL_SIZE, 1, text_color_white)
+    label_font := font_store.medium_32
     hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
-    draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
+    cents_str := "-" if show_placeholder else fmt.ctprintf("%.1f", math.abs(cents))
+    minus := !show_placeholder && cents < 0 && cents_str != "0.0"
 
-    draw_text_right(font_store.medium_32, "Cents", pos, LABEL_SIZE, 1, text_color_white)
+    switch align {
+    case .CENTER:
+        hz_right := pos + {-READOUT_GUTTER / 2, 0}
+        draw_text_right(label_font, "Hz", hz_right, LABEL_SIZE, 1, text_color_muted)
+        draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
 
-    if show_placeholder {
-        draw_text_right(value.font, "-", pos + {0, VALUE_Y}, value.size, 0, color)
-        return
-    }
+        cents_left := pos + {READOUT_GUTTER / 2, 0}
+        draw_text(label_font, "Cents", snap_to_pixels(cents_left), LABEL_SIZE, 1, text_color_muted)
+        draw_text(value.font, cents_str, snap_to_pixels(cents_left + {0, VALUE_Y}), value.size, 0, color)
+        if minus do draw_text_right(value.font, "-", cents_left + {-2, VALUE_Y}, value.size, 0, color)
+    case .RIGHT:
+        hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
+        draw_text_right(label_font, "Hz", hz_right, LABEL_SIZE, 1, text_color_muted)
+        draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
 
-    cents_str := fmt.ctprintf("%.1f", math.abs(cents))
-    width := draw_text_right(value.font, cents_str, pos + {0, VALUE_Y}, value.size, 0, color)
-    // The minus hangs to the left of the number
-    if cents < 0 && cents_str != "0.0" {
-        draw_text_right(value.font, "-", pos + {-width - 2, VALUE_Y}, value.size, 0, color)
+        draw_text_right(label_font, "Cents", pos, LABEL_SIZE, 1, text_color_muted)
+        width := draw_text_right(value.font, cents_str, pos + {0, VALUE_Y}, value.size, 0, color)
+        // The minus hangs to the left of the number
+        if minus do draw_text_right(value.font, "-", pos + {-width - 2, VALUE_Y}, value.size, 0, color)
     }
 }
+
+// Between the columns of the centred readout, room for the minus
+READOUT_GUTTER :: 40
 
 // From the right edge of the cents column to the right edge of the Hz column
 HZ_COLUMN_OFFSET :: 100

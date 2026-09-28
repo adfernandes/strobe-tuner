@@ -84,7 +84,7 @@ run_app :: proc(config: ^Config) {
     // Save target note to config when exiting the app
     defer config.target_freq_hz = target_note.frequency
 
-    if !gfx_init(1200 when DEBUG_STATS else STROBE_WIDTH, 800 if COLOR_CONTROLS else 532, APP_NAME) do return
+    if !gfx_init(1200 when DEBUG_STATS else STROBE_WIDTH, 800 if COLOR_CONTROLS else DESKTOP_HEIGHT, APP_NAME) do return
     defer gfx_shutdown()
 
     init_fonts()
@@ -321,7 +321,7 @@ run_app :: proc(config: ^Config) {
         }
 
         layout := compute_layout(gfx_window_size(), gfx_safe_area(), config.chromatic_ruler)
-        update_pixel_fonts()
+        update_pixel_fonts(layout.ruler_scale)
 
         // Draw the GUI controls
         gfx_begin_frame(hex(window_bg_color))
@@ -422,7 +422,7 @@ run_app :: proc(config: ^Config) {
             // locks that one instead
             step: int
             if config.chromatic_ruler {
-                step = gui_note_ruler(layout.ruler, target_note, note_locked, freq_estimation_active)
+                step = gui_note_ruler(layout.ruler, target_note, freq_estimation_active)
             } else {
                 draw_note(target_note, layout.note, freq_estimation_active)
                 step = gui_note_arrows(layout.note, note_locked)
@@ -452,6 +452,7 @@ run_app :: proc(config: ^Config) {
 
             draw_measurements(
                 layout.measurements,
+                layout.readout_align,
                 shown_pitch_info,
                 shown_last_good_pitch_info,
                 freq_estimation_active,
@@ -462,9 +463,12 @@ run_app :: proc(config: ^Config) {
             // -------------------------------------------------------------------------------------
 
 
-            if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
-                config.strobe_speed = speed
-                core.set_phase_comparator_speed(phase_comparator, speed)
+            // Only the strobe spins, the trace has no speed to change
+            if config.strobe_display_type != .TRACE {
+                if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
+                    config.strobe_speed = speed
+                    core.set_phase_comparator_speed(phase_comparator, speed)
+                }
             }
 
             if gui_settings_button(layout.settings) do settings_open = true

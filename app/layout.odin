@@ -17,40 +17,38 @@
 package app
 
 // Where everything goes, worked out every frame from the window size and the safe area, in points.
-// A tall window (a phone in portrait) stacks the panel under a taller strobe and moves the controls
-// down within thumb reach, anything else gets the desktop layout.
+// A tall window (a phone in portrait) stacks the panel under a taller strobe with larger notes, anything
+// else gets the desktop layout.
 
 Layout :: struct {
     strobe:         Rect,
     strobe_top:     f32, // top of the visible strobe, below the notch
     strobe_scale:   f32, // size of the strobe tracks relative to the desktop
     ruler:          Rect,
+    ruler_scale:    f32, // size of the ruler's notes relative to the desktop
     note:           [2]f32, // top left of the note without the ruler
-    measurements:   [2]f32, // top right
+    measurements:   [2]f32, // see ReadoutAlign
+    readout_align:  ReadoutAlign,
     stats:          [2]f32,
-    lock:           [2]f32, // left edge of the LED toggles, vertically centred
-    response:       [2]f32,
-    level_meter:    [2]f32,
+    lock:           [2]f32, // the middle of the button
+    response:       [2]f32, // hidden with the trace
+    level_meter:    [2]f32, // left of the icon, top of the bar
     settings:       [2]f32,
 }
 
-// Taller than wide by this much gets the portrait layout, the desktop window is 488x532
+// Taller than wide by this much gets the portrait layout
 PORTRAIT_ASPECT :: 1.3
 PANEL_PADDING :: 16
-
-// The LED toggles share a row, the second one starts this far after the first
-TOGGLE_SPACING :: 150
-
-@(private = "file")
-toggle_row :: proc(l: ^Layout, left, y: f32) {
-    l.lock = {left, y}
-    l.response = {left + TOGGLE_SPACING, y}
-}
+DESKTOP_HEIGHT :: 564 // the window, as wide as the strobe
+LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 
 RULER_HEIGHT :: 110
-// Centred under the ruler, without it right aligned with the values on the baseline of the note letter
+// A phone has the room for larger notes, and they're read from further away than a desktop screen
+PORTRAIT_RULER_SCALE :: 1.3
+// Above the ruler and centred, without it right aligned with the values on the baseline of the note letter
 READOUT_WIDTH :: HZ_COLUMN_OFFSET + 75 // enough for "4186.0"
 READOUT_HEIGHT :: 48
+READOUT_RULER_GAP :: 16
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
 
 // Where the right arrow of the note ends, the readout keeps clear of it
@@ -68,18 +66,8 @@ compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> Layout {
 desktop_layout :: proc(ruler: bool) -> (l: Layout) {
     l.strobe = {0, 0, STROBE_WIDTH, STROBE_HEIGHT}
     l.strobe_scale = 1
-    if ruler {
-        l.ruler = {PANEL_PADDING, STROBE_HEIGHT + 4, STROBE_WIDTH - 2 * PANEL_PADDING, RULER_HEIGHT}
-        l.measurements = {STROBE_WIDTH / 2 + READOUT_WIDTH / 2, l.ruler.y + RULER_HEIGHT + 6}
-    } else {
-        l.note = {PANEL_PADDING + NOTE_ARROW_SLOT, 303}
-        l.measurements = {STROBE_WIDTH - PANEL_PADDING, l.note.y + READOUT_NOTE_TOP}
-    }
     l.stats = {250, 400}
-    // The toggles sit on the bottom row between the level meter and the cog
-    toggle_row(&l, 150, 509)
-    l.level_meter = {16, 507}
-    l.settings = {477 - SETTINGS_ICON_SIZE, 520 - SETTINGS_ICON_SIZE}
+    panel_layout(&l, PANEL_PADDING, STROBE_WIDTH - PANEL_PADDING, DESKTOP_HEIGHT - PANEL_PADDING, ruler, 1)
     return
 }
 
@@ -96,28 +84,57 @@ portrait_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) 
     panel := l.strobe.y + l.strobe.height
 
     l.stats = {left + 131, panel + 80}
+    panel_layout(&l, left, right, bottom, ruler, PORTRAIT_RULER_SCALE)
+    return
+}
 
-    // From the bottom up
-    l.level_meter = {left, bottom - 10}
-    l.settings = {right - SETTINGS_ICON_SIZE, bottom - SETTINGS_ICON_SIZE}
-    toggle_row(&l, left, bottom - 52)
+// The same on the desktop and a phone: the response and the level meter in a row just under the strobe,
+// the note with the readout above it, and the lock and the settings in a row under it
+@(private = "file")
+panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_scale: f32) {
+    panel := l.strobe.y + l.strobe.height
+
+    // The response changes how fast the strobe spins, it sits just under it on the left, the level meter
+    // opposite it on the right. The 4pt bar lines up with the LED.
+    l.response = {left, panel + 20}
+    l.level_meter = {right - LEVEL_METER_WIDTH, l.response.y - 2}
+
+    defer {
+        // Opposite the lock, lined up with it
+        l.settings = {right - SETTINGS_ICON_SIZE, l.lock.y - SETTINGS_ICON_SIZE / 2}
+    }
 
     if ruler {
-        l.ruler = {left, panel + 4, right - left, RULER_HEIGHT}
-        l.measurements = {(left + right) / 2 + READOUT_WIDTH / 2, l.ruler.y + RULER_HEIGHT + 20}
+        // The readout above the note and the lock under it, the three centred together in the panel.
+        // Offsets from the middle of the ruler.
+        l.ruler_scale = ruler_scale
+        note_size := ruler_scale * RULER_NOTE_SIZE
+        readout_top := -note_size / 2 - READOUT_RULER_GAP - READOUT_HEIGHT
+        lock_y := note_size / 2 + 28
+        middle := (panel + bottom) / 2 - (readout_top + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
+
+        center := (left + right) / 2
+        height := ruler_scale * RULER_HEIGHT
+        l.ruler = {left, middle - height / 2, right - left, height}
+        l.measurements = {center, middle + readout_top}
+        l.readout_align = .CENTER
+        l.lock = {center, middle + lock_y}
         return
     }
 
-    // Next to the note when there's room, otherwise in the middle of the space between it and the toggles
-    l.note = {left + NOTE_ARROW_SLOT, panel - 3}
-    if right - READOUT_WIDTH >= note_right(l) + 12 {
+    // The readout next to the note when there's room, otherwise under it, and the lock under both
+    l.ruler_scale = 1
+    // Below the response, the top of the note is the room above the letter
+    l.note = {left + NOTE_ARROW_SLOT, panel + 24}
+    lock_y := l.note.y + NOTE_HEIGHT + 24
+    if right - READOUT_WIDTH >= note_right(l^) + 12 {
         l.measurements = {right, l.note.y + READOUT_NOTE_TOP}
     } else {
-        note_bottom := l.note.y + NOTE_HEIGHT
-        toggles_top := l.lock.y - 22
-        l.measurements = {right, (note_bottom + toggles_top - READOUT_HEIGHT) / 2}
+        l.measurements = {right, l.note.y + NOTE_HEIGHT}
+        lock_y = l.measurements.y + READOUT_HEIGHT + 24
     }
-    return
+    // Centred on the note without its arrows
+    l.lock = {l.note.x + (NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET) / 2, lock_y}
 }
 
 // The settings screen, a column of rows inside the safe area, the same on desktop and phone
@@ -128,7 +145,7 @@ SettingsLayout :: struct {
     width: f32,
 }
 
-SETTINGS_ICON_SIZE :: 24 // the cog, bottom right aligned on the main screen
+SETTINGS_ICON_SIZE :: 24 // the sliders, right aligned on the main screen
 SETTINGS_ROW_HEIGHT :: 52
 SETTINGS_CONTROL_HEIGHT :: 32 // the pills, their touch area is the whole row height
 
