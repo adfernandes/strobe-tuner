@@ -11,6 +11,8 @@ app.bin.dSYM/*
 *.exe
 
 
+build/
+
 # Ignore everything in external/
 external/*
 

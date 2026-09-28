@@ -16,11 +16,34 @@
 
 package app
 
+import "base:runtime"
+import "core:c"
 import "core:fmt"
 import "core:mem"
+import sdl "vendor:sdl3"
+
+// Building for iOS, see ios/build-sim.sh
+IOS :: #config(IOS, false)
+
+#assert(!IOS || RENDERER == "sdl", "iOS needs the sdl renderer")
 
 
 main :: proc() {
+    when IOS {
+        // UIKit owns the main thread, SDL starts the app from its application delegate
+        sdl.RunApp(c.int(len(runtime.args__)), raw_data(runtime.args__), ios_main, nil)
+    } else {
+        run()
+    }
+}
+
+ios_main :: proc "c" (argc: c.int, argv: [^]cstring) -> c.int {
+    context = runtime.default_context()
+    run()
+    return 0
+}
+
+run :: proc() {
 
     // Tracking allocator that warns you if your program is leaking memory
     when ODIN_DEBUG {

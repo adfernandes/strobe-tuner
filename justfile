@@ -78,6 +78,10 @@ build:
 build-sdl:
     odin build app -o:speed -microarch:native -define:RENDERER=sdl
 
+# SDL renderer on the iOS simulator, the first run builds the native deps into external/ios-sim
+dev-ios:
+    sh ios/build-sim.sh
+
 # Run on Win 11
 dev-win:
     odin run app -debug --extra-linker-flags="/FORCE:MULTIPLE"

@@ -197,7 +197,7 @@ run_app :: proc(config: ^Config) {
                 // [Cmd + ,] - Open config editor
             } else {
                 // TODO: support windows & linux
-                when ODIN_OS == .Darwin {
+                when ODIN_OS == .Darwin && !IOS {
                     config_path := get_config_path()
                     defer delete(config_path)
                     libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", config_path))
