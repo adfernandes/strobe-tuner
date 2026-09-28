@@ -27,13 +27,33 @@ The original fixed layout, 488×532.
 │  ◀ ▶                 │  semitone steps, only while the note is locked
 │                      │
 │  [HARMONIC] [ RESP ] │  strobe mode, response
-│  ▬▬               🐞  │  level meter, feedback
+│  🎤▬▬              ⚙ │  input level, settings
 │  (home indicator)    │
 └──────────────────────┘
 ```
 
 - No mic picker, iOS routes the input itself.
 - Debug stats only with `-define:DEBUG_STATS=true`.
+
+## Settings
+
+The cog swaps the whole window for the settings screen, the audio keeps running behind it.
+Same layout on desktop and phone, a column of 44pt rows inside the safe area.
+
+```
+┌──────────────────────┐
+│ Settings      [Done] │
+├──────────────────────┤
+│ Concert A  [- 440 +] │  pitch standard, 400–480 Hz
+│ Display [Tracks|Whee]│
+│ Style [Red|Min|Amb|R]│  red, minty, amber or ruby glow; custom colors stay in the config file
+│ Partial labels [...] │  off, 1×, Hz, note
+│ Band cents  [Off|On] │
+│ Input    [🎤 device ▾]│  desktop only
+└──────────────────────┘
+```
+
+The cog is drawn with circles and lines until there is an icon in the atlas.
 
 ## Later
 

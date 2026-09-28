@@ -37,6 +37,7 @@ PitchDetector :: struct {
     noise_floor_snr_db_threshold: f32,
     rms_quiet_threshold:          f32,
     last_quiet_time:              time.Tick,
+    pitch_standard:               f32, // A4, detected notes are named against it
 }
 
 
@@ -76,6 +77,7 @@ init_pitch_detector :: proc(
     self.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
     self.rms_quiet_threshold = rms_quiet_threshold
     self.last_quiet_time = time.tick_now()
+    self.pitch_standard = 440.0
 
     reset_noise_floor(&self)
     init_audio_capture_node(&self, "pitch")
@@ -138,7 +140,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     )
 
     info.noise_floor = self.noise_floor
-    info.detected_note = find_note(info.detected_freq)
+    info.detected_note = find_note(info.detected_freq, self.pitch_standard)
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
 
     info.is_strong_pitch =

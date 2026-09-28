@@ -111,6 +111,7 @@ run_app :: proc(config: ^Config) {
         config.rms_quiet_threshold,
     )
     defer core.destroy_pitch_detector(&pitch_detector)
+    pitch_detector.pitch_standard = config.pitch_standard
 
 
     ok, audio_capture := init_audio_capture(u32(config.samplerate), config.highpass_cutoff_hz)
@@ -131,7 +132,7 @@ run_app :: proc(config: ^Config) {
         config.strobe_mode,
     )
 
-    target_note = core.find_note(target_freq_hz)
+    target_note = core.find_note(target_freq_hz, config.pitch_standard)
 
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
@@ -146,6 +147,8 @@ run_app :: proc(config: ^Config) {
     audio_device_dropdown_index = int(audio_capture.active_device)
 
     audio_device_dropdown_active := false
+
+    settings_open := false
 
     // A locked target keeps its note name, the octave still follows the detected note
     note_locked := false
@@ -203,6 +206,13 @@ run_app :: proc(config: ^Config) {
         }
 
         if config_changed {
+            // Same notes, retuned to the pitch standard
+            pitch_detector.pitch_standard = config.pitch_standard
+            target_note = core.cents_to_note(f32(target_note.cents), config.pitch_standard)
+            if detected_note.cents != -1 {
+                detected_note = core.cents_to_note(f32(detected_note.cents), config.pitch_standard)
+            }
+
             set_strobe_colors(&strobe_display, get_strobe_colors(config))
             core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
             core.set_phase_comparator_freq(
@@ -324,6 +334,34 @@ run_app :: proc(config: ^Config) {
         // Draw the GUI controls
         gfx_begin_frame(hex(window_bg_color))
         defer gfx_end_frame()
+
+        // Choose new audio input
+        if audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
+            switch_audio_device(audio_capture, audio_devices[audio_device_dropdown_index].id)
+            core.flush_audio_capture_ringbuffer(&pitch_detector)
+            core.reset_noise_floor(&pitch_detector)
+            core.flush_audio_capture_ringbuffer(phase_comparator)
+            core.reset_phase_noise_floor(phase_comparator)
+        }
+
+        // The audio keeps running behind the settings screen
+        if settings_open {
+            close, changed := gui_settings(
+                compute_settings_layout(gfx_safe_area()),
+                config,
+                audio_devices[:],
+                &audio_device_dropdown_index,
+                &audio_device_dropdown_active,
+            )
+            if changed do config_changed = true
+            if close {
+                settings_open = false
+                audio_device_dropdown_active = false
+                exclusive_control_mode = false
+            }
+            continue
+        }
+
         {
 
             // TODO
@@ -392,15 +430,6 @@ run_app :: proc(config: ^Config) {
             // -------------------------------------------------------------------------------------
 
 
-            // Choose new audio input
-            if audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
-                switch_audio_device(audio_capture, audio_devices[audio_device_dropdown_index].id)
-                core.flush_audio_capture_ringbuffer(&pitch_detector)
-                core.reset_noise_floor(&pitch_detector)
-                core.flush_audio_capture_ringbuffer(phase_comparator)
-                core.reset_phase_noise_floor(phase_comparator)
-            }
-
             setup_strobe_display(&strobe_display, config.strobe_display_type)
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
                 layout.strobe_mode,
@@ -424,24 +453,7 @@ run_app :: proc(config: ^Config) {
                 core.set_phase_comparator_speed(phase_comparator, speed)
             }
 
-            // iOS routes the input itself: built-in mic, headset or an audio interface
-            when !IOS {
-                // TODO: add refresh button to show newly connected devices
-                audio_device_dropdown_active = gui_dropdown(
-                    layout.audio_device,
-                    240,
-                    audio_devices[:],
-                    &audio_device_dropdown_index,
-                    audio_device_dropdown_active,
-                    left_pad = 32,
-                )
-
-                // microphone icon
-                mic := layout.audio_device + {8, 4}
-                draw_texture(texture_atlas, {96, 192, 32, 32}, {mic.x, mic.y, 16, 16})
-            }
-
-            gui_feedback_button(layout.feedback)
+            if gui_settings_button(layout.settings, hex(window_bg_color)) do settings_open = true
 
 
             when COLOR_CONTROLS {
@@ -471,9 +483,12 @@ run_app :: proc(config: ^Config) {
             }
 
 
-            // Draw input level
+            // Draw input level, the microphone icon marks it as the input
             {
-                meter := layout.level_meter
+                mic := layout.level_meter + {0, -7}
+                draw_texture(texture_atlas, {96, 192, 32, 32}, {mic.x, mic.y, 16, 16})
+
+                meter := layout.level_meter + {20, 0}
                 draw_rect(meter, {60, 3}, hex(strobe_bg_color))
                 draw_rect(
                     meter,

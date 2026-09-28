@@ -29,9 +29,8 @@ Layout :: struct {
     stats:          [2]f32,
     response:       [2]f32,
     strobe_mode:    [2]f32,
-    audio_device:   [2]f32, // desktop only, iOS picks the input itself
     level_meter:    [2]f32,
-    feedback:       [2]f32,
+    settings:       [2]f32,
 }
 
 // Taller than wide by this much gets the portrait layout, the desktop window is 488x532
@@ -52,9 +51,8 @@ desktop_layout :: proc() -> (l: Layout) {
     l.stats = {250, 400}
     l.strobe_mode = {16, 456}
     l.response = {148, 456}
-    l.audio_device = {12, 496}
-    l.level_meter = {264, 507}
-    l.feedback = {461, 504}
+    l.level_meter = {16, 507}
+    l.settings = {461, 504}
     return
 }
 
@@ -76,9 +74,28 @@ portrait_layout :: proc(window: [2]f32, safe: Rect) -> (l: Layout) {
 
     // From the bottom up
     l.level_meter = {left, bottom - 10}
-    l.feedback = {right - 16, bottom - 16}
+    l.settings = {right - 16, bottom - 16}
     l.strobe_mode = {left, bottom - 60}
     l.response = {left + 132, bottom - 60}
-    l.audio_device = {left, bottom - 24}
+    return
+}
+
+// The settings screen, a column of rows inside the safe area, the same on desktop and phone
+SettingsLayout :: struct {
+    title: [2]f32,
+    done:  Rect,
+    rows:  [2]f32, // top left of the first row
+    width: f32,
+}
+
+SETTINGS_ROW_HEIGHT :: 44
+
+compute_settings_layout :: proc(safe: Rect) -> (l: SettingsLayout) {
+    left := safe.x + PANEL_PADDING
+    top := safe.y + PANEL_PADDING
+    l.width = safe.width - 2 * PANEL_PADDING
+    l.title = {left, top}
+    l.done = {left + l.width - 64, top - 4, 64, 24}
+    l.rows = {left, top + 44}
     return
 }

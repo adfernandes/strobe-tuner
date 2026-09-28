@@ -16,7 +16,6 @@
 
 package app
 
-import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:strings"
@@ -83,23 +82,6 @@ gui_strobe_mode_toggle :: proc(
     return active_strobe_mode, false
 }
 
-
-gui_feedback_button :: proc(position: [2]f32) {
-    // bug icon texture
-    draw_texture(texture_atlas, Rect{64, 192, 32, 32}, Rect{position.x, position.y, 16, 16})
-
-    if gui_button({position.x, position.y, 16, 16}) {
-        when ODIN_OS == .Darwin {
-            libc.system(cstring("open https://github.com/dsego/strobe-tuner"))
-        } else when ODIN_OS == .Windows {
-            libc.system(cstring("start https://github.com/dsego/strobe-tuner"))
-        } else when ODIN_OS == .Linux {
-            libc.system(cstring("xdg-open https://github.com/dsego/strobe-tuner"))
-        } else {
-            fmt.println("Could not open github web page.")
-        }
-    }
-}
 
 gui_strobe_partial :: proc(
     position: [2]f32,

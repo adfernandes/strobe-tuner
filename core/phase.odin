@@ -261,7 +261,7 @@ set_phase_comparator_freq :: proc(
             band.speed = speed
             speed *= speed_multiplier
         }
-        band.note = find_note(band.freq_hz)
+        band.note = find_note(band.freq_hz, pitch_standard)
         band.norm_freq = band.freq_hz / self.samplerate
         band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
 
