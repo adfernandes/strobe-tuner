@@ -34,6 +34,7 @@ icon_color := hex(0x9A9BAAFF)
 // Buttons
 pill_gray := hex(0x7D7E8FFF)
 pill_mint := hex(0x61FFCAFF)
+pill_violet := hex(0xA277FFFF)
 pill_yellow := hex(0xFFCA85FF)
 pill_dark := hex(0x2D2E35FF)
 
@@ -51,7 +52,7 @@ gui_strobe_mode_toggle :: proc(
         color = pill_mint
         label = "HARMONIC"
     } else {
-        color = pill_gray
+        color = pill_violet
         label = "FINE"
     }
 
@@ -129,7 +130,7 @@ gui_note_lock :: proc(pos: [2]f32, locked: bool) -> (toggled: bool, step: int) {
         prev := Rect{pos.x, pos.y + 116, 32, 32}
         next := Rect{pos.x + 48, pos.y + 116, 32, 32}
         draw_text(font_store.medium_32, "◀", {prev.x + 8, prev.y + 8}, 16, 0, hex(0x82E2FFFF))
-        draw_text(font_store.medium_32, "▶︎", {next.x + 8, next.y + 8}, 16, 0, hex(0x82E2FFFF))
+        draw_text(font_store.medium_32, "▶", {next.x + 8, next.y + 8}, 16, 0, hex(0x82E2FFFF))
         if gui_button(prev) do step = -1
         if gui_button(next) do step = 1
     }
@@ -195,23 +196,24 @@ gui_dropdown :: proc(
     selected_idx: ^int,
     edit_mode: bool,
     left_pad: f32 = 12,
+    height: f32 = 24,
 ) -> bool {
     edit_mode := edit_mode
-    btn_bounds := Rect{position.x, position.y, width, 24}
+    btn_bounds := Rect{position.x, position.y, width, height}
 
     // TODO: make it either a prop or depend on actual width
     max_text_len := 25
 
     // Draw the button
     draw_pill(btn_bounds, pill_dark)
-    draw_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y + 4}, icon_color)
+    draw_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y + (height - 16) / 2}, icon_color)
 
     if selected_idx != nil {
         label := strings.cut(options[selected_idx^].label, 0, max_text_len)
         draw_text(
             font_store.medium_28,
             fmt.ctprintf("%s", label),
-            {position.x + left_pad, position.y + 5},
+            {position.x + left_pad, position.y + (height - 14) / 2},
             14,
             1,
             text_color_light,

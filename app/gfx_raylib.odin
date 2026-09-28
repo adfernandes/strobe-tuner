@@ -19,6 +19,7 @@ package app
 // raylib backend (OpenGL), see gfx.odin
 
 import "core:reflect"
+import CF "core:sys/darwin/CoreFoundation"
 import "core:strings"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
@@ -121,7 +122,29 @@ when RENDERER == "raylib" {
     }
 
     mouse_wheel :: proc() -> f32 {
-        return rl.GetMouseWheelMove()
+        wheel := rl.GetMouseWheelMove()
+        // Undo natural scrolling, scrolling up always means up. raylib doesn't say if it's on, ask macOS.
+        when ODIN_OS == .Darwin {
+            if wheel != 0 && natural_scrolling() do wheel = -wheel
+        }
+        return wheel
+    }
+
+    when ODIN_OS == .Darwin {
+        foreign import core_foundation "system:CoreFoundation.framework"
+
+        @(private = "file", default_calling_convention = "c")
+        foreign core_foundation {
+            CFPreferencesGetAppBooleanValue :: proc(key, application: CF.String, valid: ^b8) -> b8 ---
+        }
+
+        // On unless turned off in System Settings, a missing key means the default
+        @(private = "file")
+        natural_scrolling :: proc() -> bool {
+            valid: b8
+            natural := CFPreferencesGetAppBooleanValue(CF.STR("com.apple.swipescrolldirection"), CF.STR(".GlobalPreferences"), &valid)
+            return bool(natural) || !bool(valid)
+        }
     }
 
     gfx_load_texture :: proc(png: []u8) -> Texture {

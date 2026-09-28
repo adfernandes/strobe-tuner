@@ -35,11 +35,12 @@ FontStore :: struct {
 
     // Phosphor icons, see ICON_CODEPOINTS
     icons_32:       Font,
+    icons_72:       Font, // the larger icons, sharp at 24pt on a 3x screen
 }
 
 font_store: FontStore
 
-FONT_CODEPOINTS :: "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎×()[]"
+FONT_CODEPOINTS :: "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶◀×()[]"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
@@ -71,11 +72,13 @@ init_fonts :: proc() {
     font_store.bold_36 = gfx_load_font(inter_bold, 36, FONT_CODEPOINTS)
     font_store.noto_medium_96 = gfx_load_font(noto_sans_mono, 92, FONT_CODEPOINTS)
     font_store.icons_32 = gfx_load_font(phosphor, 32, ICON_CODEPOINTS)
+    font_store.icons_72 = gfx_load_font(phosphor, 72, ICON_CODEPOINTS)
 }
 
-// 16pt icon with its top left at position
-draw_icon :: proc(icon: cstring, position: [2]f32, color: Color) {
-    draw_text(font_store.icons_32, icon, position, 16, 0, color)
+// Icon with its top left at position, 16pt unless told otherwise
+draw_icon :: proc(icon: cstring, position: [2]f32, color: Color, size: f32 = 16) {
+    font := font_store.icons_72 if size > 16 else font_store.icons_32
+    draw_text(font, icon, position, size, 0, color)
 }
 
 destroy_fonts :: proc() {
@@ -90,4 +93,5 @@ destroy_fonts :: proc() {
     gfx_unload_font(font_store.bold_36)
     gfx_unload_font(font_store.noto_medium_96)
     gfx_unload_font(font_store.icons_32)
+    gfx_unload_font(font_store.icons_72)
 }

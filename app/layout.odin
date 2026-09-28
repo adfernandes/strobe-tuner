@@ -52,7 +52,7 @@ desktop_layout :: proc() -> (l: Layout) {
     l.strobe_mode = {16, 456}
     l.response = {148, 456}
     l.level_meter = {16, 507}
-    l.settings = {461, 504}
+    l.settings = {477 - SETTINGS_ICON_SIZE, 520 - SETTINGS_ICON_SIZE}
     return
 }
 
@@ -74,7 +74,7 @@ portrait_layout :: proc(window: [2]f32, safe: Rect) -> (l: Layout) {
 
     // From the bottom up
     l.level_meter = {left, bottom - 10}
-    l.settings = {right - 16, bottom - 16}
+    l.settings = {right - SETTINGS_ICON_SIZE, bottom - SETTINGS_ICON_SIZE}
     l.strobe_mode = {left, bottom - 60}
     l.response = {left + 132, bottom - 60}
     return
@@ -88,7 +88,9 @@ SettingsLayout :: struct {
     width: f32,
 }
 
-SETTINGS_ROW_HEIGHT :: 44
+SETTINGS_ICON_SIZE :: 24 // the cog, bottom right aligned on the main screen
+SETTINGS_ROW_HEIGHT :: 60
+SETTINGS_CONTROL_HEIGHT :: 32 // the pills, their touch area is the whole row height
 
 compute_settings_layout :: proc(safe: Rect) -> (l: SettingsLayout) {
     left := safe.x + PANEL_PADDING
@@ -96,7 +98,7 @@ compute_settings_layout :: proc(safe: Rect) -> (l: SettingsLayout) {
     l.width = safe.width - 2 * PANEL_PADDING
     l.title = {left, top}
     // Right aligned with the rows, centred on the title
-    l.close = {left + l.width - 24, top - 3, 32, 32}
+    l.close = {left + l.width - 32, top - 11, 48, 48}
     l.rows = {left, top + 44}
     return
 }

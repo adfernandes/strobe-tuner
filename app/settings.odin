@@ -17,6 +17,8 @@
 package app
 
 import "core:fmt"
+import "core:math"
+import "core:time"
 
 // The settings screen, opened with the cog in the bottom right corner.
 // Everything that isn't needed while tuning lives here, the main screen keeps the note lock,
@@ -25,7 +27,7 @@ import "core:fmt"
 PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
-SEGMENT_WIDTH :: 56
+SEGMENT_WIDTH :: 60
 
 settings_title_color := hex(0xFBFBFBFF)
 settings_separator_color := hex(0x35363EFF)
@@ -51,7 +53,7 @@ gui_settings :: proc(
     row := 0
 
     {
-        rect := settings_row(l, row, "Concert A", 160)
+        rect := settings_row(l, row, "Concert A", 176)
         row += 1
         pitch_standard, ok := gui_stepper(
             rect,
@@ -59,6 +61,7 @@ gui_settings :: proc(
             1,
             PITCH_STANDARD_MIN,
             PITCH_STANDARD_MAX,
+            get_config_defaults().pitch_standard,
             "%.0f Hz",
         )
         if ok {
@@ -124,35 +127,27 @@ gui_settings :: proc(
             audio_devices,
             audio_device_index,
             audio_device_menu_open^,
-            left_pad = 32,
+            left_pad = 36,
+            height = rect.height,
         )
 
-        draw_icon(ICON_MICROPHONE, {rect.x + 8, rect.y + 4}, icon_color)
+        draw_icon(ICON_MICROPHONE, {rect.x + 12, rect.y + (rect.height - 16) / 2}, icon_color)
     }
 
     {
-        // Everything back to the defaults like the R key, including what's only in the config file.
-        // The first tap asks to confirm.
+        // Everything back to the defaults like the R key, including what's only in the config file
         rect := settings_row(l, row, "Reset to defaults", 2 * SEGMENT_WIDTH)
         row += 1
         draw_pill(rect, pill_dark)
-        draw_centered_label("Confirm" if reset_armed else "Reset", rect, settings_title_color)
-        if gui_button(rect) {
-            if reset_armed {
-                config^ = get_config_defaults()
-                changed = true
-            }
-            reset_armed = !reset_armed
+        draw_centered_label("Reset", rect, settings_title_color)
+        if gui_button(touch_area(rect)) {
+            config^ = get_config_defaults()
+            changed = true
         }
     }
 
-    if close do reset_armed = false
-
     return
 }
-
-@(private = "file")
-reset_armed := false
 
 
 StrobeStyle :: struct {
@@ -180,9 +175,10 @@ strobe_style_index :: proc(config: Config) -> int {
 }
 
 
+// 24pt icon in the middle of a 2x larger touch area
 gui_settings_button :: proc(position: [2]f32) -> bool {
-    draw_icon(ICON_GEAR, position, icon_color)
-    return gui_button({position.x, position.y, 16, 16})
+    draw_icon(ICON_GEAR, position, icon_color, SETTINGS_ICON_SIZE)
+    return gui_button({position.x - 12, position.y - 12, 48, 48})
 }
 
 
@@ -191,14 +187,22 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
 settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_width: f32) -> Rect {
     y := l.rows.y + f32(index) * SETTINGS_ROW_HEIGHT
 
-    draw_text(font_store.medium_28, label, {l.rows.x, y + 15}, 14, 1, text_color_light)
+    draw_text(font_store.medium_28, label, {l.rows.x, y + (SETTINGS_ROW_HEIGHT - 14) / 2}, 14, 1, text_color_light)
     draw_rect({l.rows.x, y + SETTINGS_ROW_HEIGHT - 1}, {l.width, 1}, settings_separator_color)
 
-    return {l.rows.x + l.width - control_width, y + 10, control_width, 24}
+    control_y := y + (SETTINGS_ROW_HEIGHT - SETTINGS_CONTROL_HEIGHT) / 2
+    return {l.rows.x + l.width - control_width, control_y, control_width, SETTINGS_CONTROL_HEIGHT}
+}
+
+// The pills are slimmer than a finger, taps anywhere in the height of their row count
+@(private = "file")
+touch_area :: proc(rect: Rect) -> Rect {
+    pad := (SETTINGS_ROW_HEIGHT - rect.height) / 2
+    return {rect.x, rect.y - pad, rect.width, SETTINGS_ROW_HEIGHT}
 }
 
 
-// One of a few options, the selected one is a lighter pill on a dark track
+// One of a few options, the selected one is a yellow pill on a dark track
 gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, bool) {
     draw_pill(rect, pill_dark)
 
@@ -207,11 +211,11 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, boo
         segment := Rect{rect.x + f32(i) * segment_width, rect.y, segment_width, rect.height}
 
         if i == selected {
-            draw_pill(segment, pill_gray)
+            draw_pill(segment, pill_yellow)
             draw_centered_label(label, segment, text_color_dark)
         } else {
             draw_centered_label(label, segment, text_color_light)
-            if gui_button(segment) do return i, true
+            if gui_button(touch_area(segment)) do return i, true
         }
     }
 
@@ -220,10 +224,10 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, boo
 
 
 // A value with - and + on either side
-gui_stepper :: proc(rect: Rect, value, step, low, high: f32, format: string) -> (f32, bool) {
+gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: string) -> (f32, bool) {
     draw_pill(rect, pill_dark)
 
-    button_width := rect.height * 1.5
+    button_width: f32 = 44
     minus := Rect{rect.x, rect.y, button_width, rect.height}
     plus := Rect{rect.x + rect.width - button_width, rect.y, button_width, rect.height}
 
@@ -232,15 +236,39 @@ gui_stepper :: proc(rect: Rect, value, step, low, high: f32, format: string) -> 
     draw_centered_label(fmt.ctprintf(format, value), rect, settings_title_color)
     draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
 
-    if gui_button(minus) do return max(value - step, low), true
-    if gui_button(plus) do return min(value + step, high), true
+    if gui_button(touch_area(minus)) do return max(value - step, low), true
+    if gui_button(touch_area(plus)) do return min(value + step, high), true
+
+    // Double clicking the value between the buttons puts it back to the default
+    if gui_button(touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})) {
+        now := time.tick_now()
+        double_click := time.tick_diff(stepper_last_click, now) < 400 * time.Millisecond
+        stepper_last_click = now
+        if double_click do return default, true
+    }
+
+    // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps
+    if point_in_rect(mouse_position(), touch_area(rect)) && !exclusive_control_mode {
+        stepper_scroll += mouse_wheel()
+        steps := math.trunc(stepper_scroll)
+        stepper_scroll -= steps
+        if steps != 0 do return clamp(value + steps * step, low, high), true
+    } else {
+        stepper_scroll = 0
+    }
 
     return value, false
 }
+
+@(private = "file")
+stepper_scroll: f32
+
+@(private = "file")
+stepper_last_click: time.Tick
 
 
 @(private = "file")
 draw_centered_label :: proc(label: cstring, rect: Rect, color: Color) {
     width := measure_text(font_store.medium_28, label, 14, 1).x
-    draw_text(font_store.medium_28, label, {rect.x + (rect.width - width) / 2, rect.y + 5}, 14, 1, color)
+    draw_text(font_store.medium_28, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - 14) / 2}, 14, 1, color)
 }

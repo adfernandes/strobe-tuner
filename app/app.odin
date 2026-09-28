@@ -381,7 +381,7 @@ run_app :: proc(config: ^Config) {
 
                 arrow_y := layout.strobe_top + 10
                 if note_low_state do draw_text(font_store.medium_32, "◀", {layout.strobe.x + 10, arrow_y}, 16, 0, hex(0x82E2FFFF))
-                else if note_high_state do draw_text(font_store.medium_32, "▶︎", {layout.strobe.x + layout.strobe.width - 22, arrow_y}, 16, 0, hex(0x82E2FFFF))
+                else if note_high_state do draw_text(font_store.medium_32, "▶", {layout.strobe.x + layout.strobe.width - 22, arrow_y}, 16, 0, hex(0x82E2FFFF))
             }
 
 

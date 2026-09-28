@@ -281,7 +281,8 @@ when RENDERER == "sdl" {
             case .MOUSE_BUTTON_DOWN:
                 if event.button.button == sdl.BUTTON_LEFT do gpu.mouse_clicked = true
             case .MOUSE_WHEEL:
-                gpu.wheel += event.wheel.y
+                // Undo natural scrolling, scrolling up always means up
+                gpu.wheel += -event.wheel.y if event.wheel.direction == .FLIPPED else event.wheel.y
             }
         }
 
