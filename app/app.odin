@@ -506,12 +506,12 @@ run_app :: proc(config: ^Config) {
                 draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -6}, icon_color)
 
                 meter := layout.level_meter + {20, 0}
-                draw_rounded_rect({meter.x, meter.y, 60, 4}, 2, hex(strobe_bg_color))
-                draw_rounded_rect(
-                    {meter.x, meter.y, 60 + clamp(pitch_info.rms_dbfs, -60, 0), 4},
-                    2,
-                    hex(0x82E2FFFF),
-                )
+                track := Rect{meter.x, meter.y, 60, 4}
+                draw_rounded_rect(track, 2, hex(strobe_bg_color))
+                // The level is the rounded track cut off flat where it ends
+                begin_scissor({meter.x, meter.y, 60 + clamp(pitch_info.rms_dbfs, -60, 0), 4})
+                draw_rounded_rect(track, 2, hex(0x82E2FFFF))
+                end_scissor()
 
                 when DEBUG_STATS {
                     floor_level := core.dbfs(pitch_info.noise_floor)
