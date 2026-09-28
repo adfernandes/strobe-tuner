@@ -111,13 +111,7 @@ save_ini :: proc(ini_map: ini.Map) {
 }
 
 get_config_directory :: proc(app_name: string) -> string {
-    when ODIN_OS == .Windows {
-        // Use %APPDATA% on Windows
-        base_path := os.get_env("APPDATA", context.allocator)
-        defer delete(base_path)
-        path, _ := filepath.join({base_path, app_name})
-        return path
-    } else when ODIN_OS == .Darwin {
+    when ODIN_OS == .Darwin {
         // macOS: ~/Library/Application Support
         home := os.get_env("HOME", context.allocator)
         defer delete(home)

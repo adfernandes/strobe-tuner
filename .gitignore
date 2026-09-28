@@ -1,5 +1,4 @@
 *.dylib
-*.dll
 *.bin
 *.wav
 *.o
@@ -7,8 +6,6 @@
 app.bin.dSYM/*
 *.zip
 *.so
-*.res
-*.exe
 
 
 build/
