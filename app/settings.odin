@@ -89,6 +89,19 @@ gui_settings :: proc(
     }
 
     {
+        // The partials on the tracks in harmonic mode, the same sets as the I key
+        labels := []cstring{"1 2 4", "1 1½ 2", "1 2 3"}
+        rect := settings_row(l, row, "Harmonics", f32(len(labels)) * SEGMENT_WIDTH)
+        row += 1
+        if i, ok := gui_segmented(rect, labels, config.strobe_intervals_index); ok {
+            options := INTERVAL_OPTIONS
+            config.strobe_intervals_index = i
+            config.strobe_intervals = options[i]
+            changed = true
+        }
+    }
+
+    {
         labels := []cstring{"Tracks", "Wheel", "Trace"}
         rect := settings_row(l, row, "Display", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
@@ -128,15 +141,6 @@ gui_settings :: proc(
         labels := []cstring{"Off", "1×", "Hz", "Note"}
         if i, ok := gui_segmented(rect, labels, int(config.partial_labels)); ok {
             config.partial_labels = PartialLabelType(i)
-        }
-    }
-
-    {
-        rect := settings_row(l, row, "Band cents", 2 * SEGMENT_WIDTH)
-        row += 1
-        labels := []cstring{"Off", "On"}
-        if i, ok := gui_segmented(rect, labels, int(config.show_band_cents)); ok {
-            config.show_band_cents = i == 1
         }
     }
 

@@ -19,7 +19,7 @@ package app
 import "core:math"
 
 // Missing ones draw as the first, the space too. Inter has no ♯, it comes from Noto.
-FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-1234567890.,:π!×()[]"
+FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-1234567890.,:π!×½()[]"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
