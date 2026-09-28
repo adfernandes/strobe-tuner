@@ -386,15 +386,17 @@ run_app :: proc(config: ^Config) {
                     arrow_pulse_phase = 0
                 }
 
+                // On the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing
+                // right to tune up, like higher notes are to the right on the ruler
                 arrow := pixel_fonts.strobe_arrow
                 arrow_y := layout.strobe_top + 10
                 if note_low_state {
                     position := snap_to_pixels({layout.strobe.x + 10, arrow_y})
-                    draw_text(arrow.font, "◀", position, arrow.size, 0, arrow_color)
-                } else if note_high_state {
-                    arrow_width := measure_text(arrow.font, "▶", arrow.size, 0).x
-                    position := snap_to_pixels({layout.strobe.x + layout.strobe.width - 10 - arrow_width, arrow_y})
                     draw_text(arrow.font, "▶", position, arrow.size, 0, arrow_color)
+                } else if note_high_state {
+                    arrow_width := measure_text(arrow.font, "◀", arrow.size, 0).x
+                    position := snap_to_pixels({layout.strobe.x + layout.strobe.width - 10 - arrow_width, arrow_y})
+                    draw_text(arrow.font, "◀", position, arrow.size, 0, arrow_color)
                 }
             }
 
