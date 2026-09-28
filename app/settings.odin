@@ -83,9 +83,9 @@ gui_settings :: proc(
     }
 
     {
-        rect := settings_row(l, row, "Display", 2 * SEGMENT_WIDTH)
+        labels := []cstring{"Tracks", "Wheel", "Trace"}
+        rect := settings_row(l, row, "Display", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
-        labels := []cstring{"Tracks", "Wheel"}
         if i, ok := gui_segmented(rect, labels, int(config.strobe_display_type)); ok {
             config.strobe_display_type = StrobeDisplayType(i)
         }

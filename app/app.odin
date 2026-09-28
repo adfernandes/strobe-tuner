@@ -163,6 +163,9 @@ run_app :: proc(config: ^Config) {
     note_high_state := false
     arrow_pulse_phase: f32 = 0
 
+    cents_trace := create_trace()
+    defer destroy_trace(&cents_trace)
+
 
     color1 := hex(config.strobe_color_1)
     color2 := hex(config.strobe_color_2)
@@ -292,16 +295,17 @@ run_app :: proc(config: ^Config) {
             )
         }
 
+        // The same cents as the readout, a gap while there's no pitch
+        traced_cents := math.nan_f32()
+        if freq_estimation_active && !out_of_range do traced_cents = shown_pitch_info.err_cents
+        record_trace(&cents_trace, traced_cents, pitch_info.fresh, gfx_frame_time())
+
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
         core.run_phase_detection(phase_comparator, config.use_phase_average)
 
 
         if key_pressed(.TAB) {
-            if config.strobe_display_type == .CURVED_TRACKS {
-                config.strobe_display_type = .SPINNING_WHEEL
-            } else {
-                config.strobe_display_type = .CURVED_TRACKS
-            }
+            config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
         }
 
         if key_pressed(.G) {
@@ -352,16 +356,27 @@ run_app :: proc(config: ^Config) {
 
         {
 
-            // TODO
-            // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
-            draw_strobe_display(
-                &strobe_display,
-                layout.strobe,
-                layout.strobe_scale,
-                phase_comparator,
-                out_of_range,
-                config,
-            )
+            setup_strobe_display(&strobe_display, config.strobe_display_type)
+
+            if config.strobe_display_type == .TRACE {
+                trace_rect := layout.strobe
+                trace_rect.y = layout.strobe_top
+                trace_rect.height -= layout.strobe_top
+                draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, hex(strobe_bg_color))
+                colors := get_strobe_colors(config)
+                draw_cents_trace(&cents_trace, trace_rect, hex(colors.x), hex(colors.y), hex(strobe_bg_color))
+            } else {
+                // TODO
+                // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
+                draw_strobe_display(
+                    &strobe_display,
+                    layout.strobe,
+                    layout.strobe_scale,
+                    phase_comparator,
+                    out_of_range,
+                    config,
+                )
+            }
 
             // Only the strong readings, a fading note drifts and would flash the arrows
             arrow_cents_err := core.cents_deviation(last_good_pitch_info.detected_freq, target_note.frequency)
@@ -446,8 +461,6 @@ run_app :: proc(config: ^Config) {
 
             // -------------------------------------------------------------------------------------
 
-
-            setup_strobe_display(&strobe_display, config.strobe_display_type)
 
             if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
                 config.strobe_speed = speed

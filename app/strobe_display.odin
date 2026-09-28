@@ -223,6 +223,8 @@ draw_strobe_display :: proc(
             band_height = 50.0
         }
         period_count = 12.0
+    case .TRACE:
+        return // drawn by draw_cents_trace instead
     }
     curvature_radius *= scale
     band_height *= scale

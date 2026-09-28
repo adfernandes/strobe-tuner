@@ -41,6 +41,7 @@ PartialLabelType :: enum {
 StrobeDisplayType :: enum {
     CURVED_TRACKS,
     SPINNING_WHEEL,
+    TRACE, // a line of the cents over the last few seconds
 }
 
 
