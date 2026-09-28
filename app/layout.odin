@@ -83,7 +83,7 @@ portrait_layout :: proc(window: [2]f32, safe: Rect) -> (l: Layout) {
 // The settings screen, a column of rows inside the safe area, the same on desktop and phone
 SettingsLayout :: struct {
     title: [2]f32,
-    done:  Rect,
+    close: Rect, // touch area of the ✕
     rows:  [2]f32, // top left of the first row
     width: f32,
 }
@@ -95,7 +95,8 @@ compute_settings_layout :: proc(safe: Rect) -> (l: SettingsLayout) {
     top := safe.y + PANEL_PADDING
     l.width = safe.width - 2 * PANEL_PADDING
     l.title = {left, top}
-    l.done = {left + l.width - 64, top - 4, 64, 24}
+    // Right aligned with the rows, centred on the title
+    l.close = {left + l.width - 24, top - 3, 32, 32}
     l.rows = {left, top + 44}
     return
 }

@@ -35,7 +35,7 @@ import "core:math/linalg"
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
 //
-//   Texture, gfx_load_texture(png), gfx_unload_texture(texture)
+//   Texture, gfx_load_texture(png), gfx_load_texture_rgba(width, height, pixels), gfx_unload_texture(texture)
 //   Font, gfx_load_font(ttf, size, codepoints), gfx_unload_font(font)
 //   draw_texture(texture, source, dest, tint), negative source width/height flips the image
 //   draw_rect(position, size, color), draw_rect_lines(rect, thickness, color)

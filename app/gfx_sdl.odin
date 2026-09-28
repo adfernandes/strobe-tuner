@@ -464,6 +464,11 @@ when RENDERER == "sdl" {
         return create_texture(w, h, pixels[:w * h * 4])
     }
 
+    // Straight alpha RGBA, the sampler is linear already
+    gfx_load_texture_rgba :: proc(width, height: i32, pixels: []u8) -> Texture {
+        return create_texture(width, height, pixels)
+    }
+
     gfx_unload_texture :: proc(texture: Texture) {
         if texture.handle != nil do sdl.ReleaseGPUTexture(gpu.device, texture.handle)
     }

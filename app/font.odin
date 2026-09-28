@@ -32,16 +32,33 @@ FontStore :: struct {
     // bold
     bold_32:        Font,
     bold_36:        Font,
+
+    // Phosphor icons, see ICON_CODEPOINTS
+    icons_32:       Font,
 }
 
 font_store: FontStore
 
 FONT_CODEPOINTS :: "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎×()[]"
 
+// Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
+//   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
+//       --output-file=assets/fonts/phosphor/Phosphor-Icons.ttf
+// The codepoints are in the style.css of the @phosphor-icons/web package.
+ICON_GEAR: cstring : ""
+ICON_MICROPHONE: cstring : ""
+ICON_CARET_DOWN: cstring : ""
+ICON_MINUS: cstring : ""
+ICON_PLUS: cstring : ""
+ICON_X: cstring : ""
+
+ICON_CODEPOINTS :: ""
+
 init_fonts :: proc() {
     inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
     inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
     noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
+    phosphor := #load("../assets/fonts/phosphor/Phosphor-Icons.ttf")
 
     font_store.medium_24 = gfx_load_font(inter_medium, 24, FONT_CODEPOINTS)
     font_store.medium_28 = gfx_load_font(inter_medium, 28, FONT_CODEPOINTS)
@@ -53,6 +70,12 @@ init_fonts :: proc() {
     font_store.bold_32 = gfx_load_font(inter_bold, 32, FONT_CODEPOINTS)
     font_store.bold_36 = gfx_load_font(inter_bold, 36, FONT_CODEPOINTS)
     font_store.noto_medium_96 = gfx_load_font(noto_sans_mono, 92, FONT_CODEPOINTS)
+    font_store.icons_32 = gfx_load_font(phosphor, 32, ICON_CODEPOINTS)
+}
+
+// 16pt icon with its top left at position
+draw_icon :: proc(icon: cstring, position: [2]f32, color: Color) {
+    draw_text(font_store.icons_32, icon, position, 16, 0, color)
 }
 
 destroy_fonts :: proc() {
@@ -66,4 +89,5 @@ destroy_fonts :: proc() {
     gfx_unload_font(font_store.bold_32)
     gfx_unload_font(font_store.bold_36)
     gfx_unload_font(font_store.noto_medium_96)
+    gfx_unload_font(font_store.icons_32)
 }

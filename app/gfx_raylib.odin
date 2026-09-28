@@ -130,6 +130,20 @@ when RENDERER == "raylib" {
         return rl.LoadTextureFromImage(image)
     }
 
+    // Straight alpha RGBA, filtered so shapes scale smoothly
+    gfx_load_texture_rgba :: proc(width, height: i32, pixels: []u8) -> Texture {
+        image := rl.Image {
+            data    = raw_data(pixels),
+            width   = width,
+            height  = height,
+            mipmaps = 1,
+            format  = .UNCOMPRESSED_R8G8B8A8,
+        }
+        texture := rl.LoadTextureFromImage(image)
+        rl.SetTextureFilter(texture, .BILINEAR)
+        return texture
+    }
+
     gfx_unload_texture :: proc(texture: Texture) {
         rl.UnloadTexture(texture)
     }

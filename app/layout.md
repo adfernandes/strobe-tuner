@@ -42,7 +42,7 @@ Same layout on desktop and phone, a column of 44pt rows inside the safe area.
 
 ```
 ┌──────────────────────┐
-│ Settings      [Done] │
+│ Settings           ✕ │
 ├──────────────────────┤
 │ Concert A  [- 440 +] │  pitch standard, 400–480 Hz
 │ Display [Tracks|Whee]│
@@ -50,10 +50,14 @@ Same layout on desktop and phone, a column of 44pt rows inside the safe area.
 │ Partial labels [...] │  off, 1×, Hz, note
 │ Band cents  [Off|On] │
 │ Input    [🎤 device ▾]│  desktop only
+│ Reset to defaults [R]│  tap twice, the first tap asks to confirm
 └──────────────────────┘
 ```
 
-The cog is drawn with circles and lines until there is an icon in the atlas.
+## Icons and shapes
+
+- Icons are Phosphor Regular glyphs (`assets/fonts/phosphor`), drawn as text at 16pt, see `font.odin` to add one.
+- Pills and rounded rectangles are cut from a white circle generated at startup and tinted, see `shapes.odin`.
 
 ## Later
 

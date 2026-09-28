@@ -1,0 +1,86 @@
+// Copyright (C) 2025  Davorin Šego
+
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+// more details.
+
+// You should have received a copy of the GNU General Public License along
+// with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+package app
+
+import "core:math/linalg"
+
+// Rounded shapes are cut from one white anti-aliased circle generated at startup and tinted when drawn:
+// the quarters make the corners, the middle row and column stretch into the straight edges.
+
+// Pixels, a 24pt pill at 2x, the size of all the buttons
+SHAPE_SIZE :: 48
+
+shape_texture: Texture
+
+load_shapes :: proc() {
+    pixels: [SHAPE_SIZE * SHAPE_SIZE * 4]u8
+    radius: f32 = SHAPE_SIZE / 2
+
+    for y in 0 ..< SHAPE_SIZE {
+        for x in 0 ..< SHAPE_SIZE {
+            // Distance from the pixel centre to the edge covers the pixel partially
+            d := linalg.length([2]f32{f32(x) + 0.5, f32(y) + 0.5} - radius)
+            coverage := clamp(radius - d + 0.5, 0, 1)
+
+            i := (y * SHAPE_SIZE + x) * 4
+            pixels[i + 0] = 255
+            pixels[i + 1] = 255
+            pixels[i + 2] = 255
+            pixels[i + 3] = u8(coverage * 255 + 0.5)
+        }
+    }
+
+    shape_texture = gfx_load_texture_rgba(SHAPE_SIZE, SHAPE_SIZE, pixels[:])
+}
+
+unload_shapes :: proc() {
+    gfx_unload_texture(shape_texture)
+}
+
+draw_rounded_rect :: proc(rect: Rect, radius: f32, color: Color) {
+    r := min(radius, rect.width / 2, rect.height / 2)
+    half: f32 = SHAPE_SIZE / 2
+
+    left, right := rect.x, rect.x + rect.width - r
+    top, bottom := rect.y, rect.y + rect.height - r
+    inner := [2]f32{rect.width - 2 * r, rect.height - 2 * r}
+
+    // Corners
+    draw_texture(shape_texture, {0, 0, half, half}, {left, top, r, r}, color)
+    draw_texture(shape_texture, {half, 0, half, half}, {right, top, r, r}, color)
+    draw_texture(shape_texture, {0, half, half, half}, {left, bottom, r, r}, color)
+    draw_texture(shape_texture, {half, half, half, half}, {right, bottom, r, r}, color)
+
+    // Edges
+    if inner.x > 0 {
+        draw_texture(shape_texture, {half - 0.5, 0, 1, half}, {left + r, top, inner.x, r}, color)
+        draw_texture(shape_texture, {half - 0.5, half, 1, half}, {left + r, bottom, inner.x, r}, color)
+    }
+    if inner.y > 0 {
+        draw_texture(shape_texture, {0, half - 0.5, half, 1}, {left, top + r, r, inner.y}, color)
+        draw_texture(shape_texture, {half, half - 0.5, half, 1}, {right, top + r, r, inner.y}, color)
+    }
+
+    if inner.x > 0 && inner.y > 0 {
+        draw_rect({left + r, top + r}, inner, color)
+    }
+}
+
+// Fully rounded ends
+draw_pill :: proc(rect: Rect, color: Color) {
+    draw_rounded_rect(rect, rect.height / 2, color)
+}

@@ -24,22 +24,18 @@ import "core:strings"
 import "../core"
 
 
-texture_atlas: Texture
-
 // an active dropdown menu should not trigger other GUI controls
 exclusive_control_mode := false
 
 text_color_dark := hex(0x15141BFF)
 text_color_light := hex(0xBDBDBDFF)
+icon_color := hex(0x9A9BAAFF)
 
-
-load_texture_atlas :: proc() {
-    texture_atlas = gfx_load_texture(#load("../assets/images/atlas.2x.png"))
-}
-
-unload_texture_atlas :: proc() {
-    gfx_unload_texture(texture_atlas)
-}
+// Buttons
+pill_gray := hex(0x7D7E8FFF)
+pill_mint := hex(0x61FFCAFF)
+pill_yellow := hex(0xFFCA85FF)
+pill_dark := hex(0x2D2E35FF)
 
 gui_strobe_mode_toggle :: proc(
     position: [2]f32,
@@ -48,22 +44,21 @@ gui_strobe_mode_toggle :: proc(
     core.StrobeMode,
     bool,
 ) {
-    tex_src: Rect
+    color: Color
     label: cstring
 
     if active_strobe_mode == .HARMONIC_MODE {
-        tex_src = Rect{0, 96, 240, 48}
+        color = pill_mint
         label = "HARMONIC"
     } else {
-        tex_src = Rect{0, 0, 240, 48}
+        color = pill_gray
         label = "FINE"
     }
 
     width: f32 = 120
     label_width := measure_text(font_store.medium_28, label, 14, 1).x
 
-    // rounded button texture
-    draw_texture(texture_atlas, tex_src, Rect{position.x, position.y, width, 24})
+    draw_pill({position.x, position.y, width, 24}, color)
 
     draw_text(
         font_store.medium_28,
@@ -160,8 +155,7 @@ gui_response_toggle :: proc(position: [2]f32, speed: f32) -> (f32, bool) {
     width: f32 = 146
     label_width := measure_text(font_store.medium_28, labels[step], 14, 1).x
 
-    // rounded button texture
-    draw_texture(texture_atlas, Rect{240, 96, width * 2, 48}, Rect{position.x, position.y, width, 24})
+    draw_pill({position.x, position.y, width, 24}, pill_yellow)
     draw_text(
         font_store.medium_28,
         labels[step],
@@ -209,14 +203,8 @@ gui_dropdown :: proc(
     max_text_len := 25
 
     // Draw the button
-    {
-        // Draw the left part of the dropdown button
-        draw_texture(texture_atlas, Rect{0, 144, width * 2, 48}, Rect{position.x, position.y, width - 16, 24})
-        // Draw the rounded cap on the right side
-        draw_texture(texture_atlas, Rect{0, 144, -32, 48}, Rect{position.x + width - 16, position.y, 16, 24})
-        // Draw the triangle icon
-        draw_texture(texture_atlas, Rect{128, 192, 32, 32}, Rect{position.x + width - 20, position.y + 4, 16, 16})
-    }
+    draw_pill(btn_bounds, pill_dark)
+    draw_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y + 4}, icon_color)
 
     if selected_idx != nil {
         label := strings.cut(options[selected_idx^].label, 0, max_text_len)
@@ -255,19 +243,8 @@ gui_dropdown :: proc(
     if edit_mode {
         menu_position := [2]f32{position.x, position.y - menu_height - 30}
 
-        // Top cap
-        draw_texture(texture_atlas, Rect{0, 144, width * 2, 24}, Rect{menu_position.x, menu_position.y, width - 16, 12})
-        draw_texture(texture_atlas, Rect{0, 144, -32, 24}, Rect{position.x + width - 16, menu_position.y, 16, 12})
-
-        draw_rect(
-            {menu_position.x, menu_position.y + 12},
-            {width, menu_height},
-            hex(0x2D2E35FF),
-        )
-
-        // Bottom cap
-        draw_texture(texture_atlas, Rect{0, 144, width * 2, -24}, Rect{menu_position.x, menu_position.y + 12 + menu_height, width - 16, 12})
-        draw_texture(texture_atlas, Rect{0, 144, -32, -24}, Rect{menu_position.x + width - 16, menu_position.y + 12 + menu_height, 16, 12})
+        // Options with a 12pt rounded margin above and below
+        draw_rounded_rect({menu_position.x, menu_position.y, width, menu_height + 24}, 12, pill_dark)
         // debug
         // draw_rect_lines(menu_bounds, 1.0, ORANGE)
 

@@ -77,8 +77,8 @@ run_app :: proc(config: ^Config) {
     init_fonts()
     defer destroy_fonts()
 
-    load_texture_atlas()
-    defer unload_texture_atlas()
+    load_shapes()
+    defer unload_shapes()
 
     //  --------------------------------------------------------------------------------------------
 
@@ -453,7 +453,7 @@ run_app :: proc(config: ^Config) {
                 core.set_phase_comparator_speed(phase_comparator, speed)
             }
 
-            if gui_settings_button(layout.settings, hex(window_bg_color)) do settings_open = true
+            if gui_settings_button(layout.settings) do settings_open = true
 
 
             when COLOR_CONTROLS {
@@ -485,8 +485,7 @@ run_app :: proc(config: ^Config) {
 
             // Draw input level, the microphone icon marks it as the input
             {
-                mic := layout.level_meter + {0, -7}
-                draw_texture(texture_atlas, {96, 192, 32, 32}, {mic.x, mic.y, 16, 16})
+                draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -7}, icon_color)
 
                 meter := layout.level_meter + {20, 0}
                 draw_rect(meter, {60, 3}, hex(strobe_bg_color))

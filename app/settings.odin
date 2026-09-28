@@ -17,15 +17,10 @@
 package app
 
 import "core:fmt"
-import "core:math"
 
 // The settings screen, opened with the cog in the bottom right corner.
 // Everything that isn't needed while tuning lives here, the main screen keeps the note lock,
 // the strobe mode and the response.
-
-// Pill rows in the texture atlas (top left, in pixels), each 48px tall
-PILL_GRAY :: [2]f32{0, 0}
-PILL_DARK :: [2]f32{0, 144}
 
 PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
@@ -34,10 +29,9 @@ SEGMENT_WIDTH :: 56
 
 settings_title_color := hex(0xFBFBFBFF)
 settings_separator_color := hex(0x35363EFF)
-settings_icon_color := hex(0x9A9BAAFF)
 
 
-// Returns close when Done is tapped, changed when the strobe or the note detection needs updating
+// Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating
 gui_settings :: proc(
     l: SettingsLayout,
     config: ^Config,
@@ -50,9 +44,9 @@ gui_settings :: proc(
 ) {
     draw_text(font_store.bold_36, "Settings", l.title, 18, 1, settings_title_color)
 
-    draw_pill(PILL_GRAY, l.done)
-    draw_centered_label("Done", l.done, text_color_dark)
-    if gui_button(l.done) do close = true
+    // 16pt icon in the middle of a larger touch area
+    draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
+    if gui_button(l.close) do close = true
 
     row := 0
 
@@ -133,13 +127,32 @@ gui_settings :: proc(
             left_pad = 32,
         )
 
-        // microphone icon
-        mic := [2]f32{rect.x + 8, rect.y + 4}
-        draw_texture(texture_atlas, {96, 192, 32, 32}, {mic.x, mic.y, 16, 16})
+        draw_icon(ICON_MICROPHONE, {rect.x + 8, rect.y + 4}, icon_color)
     }
+
+    {
+        // Everything back to the defaults like the R key, including what's only in the config file.
+        // The first tap asks to confirm.
+        rect := settings_row(l, row, "Reset to defaults", 2 * SEGMENT_WIDTH)
+        row += 1
+        draw_pill(rect, pill_dark)
+        draw_centered_label("Confirm" if reset_armed else "Reset", rect, settings_title_color)
+        if gui_button(rect) {
+            if reset_armed {
+                config^ = get_config_defaults()
+                changed = true
+            }
+            reset_armed = !reset_armed
+        }
+    }
+
+    if close do reset_armed = false
 
     return
 }
+
+@(private = "file")
+reset_armed := false
 
 
 StrobeStyle :: struct {
@@ -167,19 +180,8 @@ strobe_style_index :: proc(config: Config) -> int {
 }
 
 
-// Cog glyph, a stand-in until there is an icon in the atlas
-gui_settings_button :: proc(position: [2]f32, background: Color) -> bool {
-    center := position + {8, 8}
-
-    TEETH :: 8
-    for i in 0 ..< TEETH {
-        angle := f32(i) / TEETH * math.TAU
-        tip := center + 7.5 * [2]f32{math.cos(angle), math.sin(angle)}
-        draw_line(center, tip, 3, settings_icon_color)
-    }
-    draw_circle(center, 5.5, settings_icon_color)
-    draw_circle(center, 2.5, background)
-
+gui_settings_button :: proc(position: [2]f32) -> bool {
+    draw_icon(ICON_GEAR, position, icon_color)
     return gui_button({position.x, position.y, 16, 16})
 }
 
@@ -198,14 +200,14 @@ settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_widt
 
 // One of a few options, the selected one is a lighter pill on a dark track
 gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, bool) {
-    draw_pill(PILL_DARK, rect)
+    draw_pill(rect, pill_dark)
 
     segment_width := rect.width / f32(len(labels))
     for label, i in labels {
         segment := Rect{rect.x + f32(i) * segment_width, rect.y, segment_width, rect.height}
 
         if i == selected {
-            draw_pill(PILL_GRAY, segment)
+            draw_pill(segment, pill_gray)
             draw_centered_label(label, segment, text_color_dark)
         } else {
             draw_centered_label(label, segment, text_color_light)
@@ -219,33 +221,21 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, boo
 
 // A value with - and + on either side
 gui_stepper :: proc(rect: Rect, value, step, low, high: f32, format: string) -> (f32, bool) {
-    draw_pill(PILL_DARK, rect)
+    draw_pill(rect, pill_dark)
 
     button_width := rect.height * 1.5
     minus := Rect{rect.x, rect.y, button_width, rect.height}
     plus := Rect{rect.x + rect.width - button_width, rect.y, button_width, rect.height}
 
-    draw_centered_label("-", minus, text_color_light)
+    icon_offset := [2]f32{(button_width - 16) / 2, (rect.height - 16) / 2}
+    draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, icon_color)
     draw_centered_label(fmt.ctprintf(format, value), rect, settings_title_color)
-    draw_centered_label("+", plus, text_color_light)
+    draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
 
     if gui_button(minus) do return max(value - step, low), true
     if gui_button(plus) do return min(value + step, high), true
 
     return value, false
-}
-
-
-// Stretch a pill from the atlas to any width: the left cap, a stretched middle and the left cap flipped
-draw_pill :: proc(src: [2]f32, rect: Rect) {
-    cap := rect.height * 2 / 3
-    middle := rect.width - 2 * cap
-
-    draw_texture(texture_atlas, {src.x, src.y, 32, 48}, {rect.x, rect.y, cap, rect.height})
-    if middle > 0 {
-        draw_texture(texture_atlas, {src.x + 32, src.y, 16, 48}, {rect.x + cap, rect.y, middle, rect.height})
-    }
-    draw_texture(texture_atlas, {src.x, src.y, -32, 48}, {rect.x + rect.width - cap, rect.y, cap, rect.height})
 }
 
 
