@@ -51,25 +51,32 @@ gui_strobe_mode_toggle :: proc(
 ) {
     tex_src: Rect
     label: cstring
-    label_pos: [2]f32
 
     if active_strobe_mode == .HARMONIC_MODE {
         tex_src = Rect{0, 96, 240, 48}
         label = "HARMONIC"
-        label_pos = [2]f32{position.x + 27.0, position.y + 5}
     } else {
         tex_src = Rect{0, 0, 240, 48}
-        label = "VERNIER"
-        label_pos = [2]f32{position.x + 32.0, position.y + 5}
+        label = "FINE"
     }
 
+    width: f32 = 120
+    label_width := measure_text(font_store.medium_28, label, 14, 1).x
+
     // rounded button texture
-    draw_texture(texture_atlas, tex_src, Rect{position.x, position.y, 120, 24})
+    draw_texture(texture_atlas, tex_src, Rect{position.x, position.y, width, 24})
 
-    draw_text(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
+    draw_text(
+        font_store.medium_28,
+        label,
+        {position.x + (width - label_width) / 2, position.y + 5},
+        14,
+        1,
+        text_color_dark,
+    )
 
-    if gui_button({position.x, position.y, 120, 24}) {
-        if active_strobe_mode == .HARMONIC_MODE do return .VERNIER_MODE, true
+    if gui_button({position.x, position.y, width, 24}) {
+        if active_strobe_mode == .HARMONIC_MODE do return .FINE_MODE, true
         else do return .HARMONIC_MODE, true
     }
 

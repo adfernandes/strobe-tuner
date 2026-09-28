@@ -61,7 +61,7 @@ Config :: struct {
     // audio card sampling rate, e.g. 44.100 Hz
     samplerate:                   int,
 
-    // harmonic to track multiple frequencies or "vernier" to track one pitch at different sensitivities
+    // harmonic to track multiple frequencies or "fine" to track one pitch at different sensitivities
     strobe_mode:                  core.StrobeMode,
 
     // the sensitivity or speed of the base strobe band,

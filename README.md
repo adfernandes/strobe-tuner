@@ -19,7 +19,7 @@ A simple stroboscopic instrument tuner.
 - Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality, no contrast or gain to set.
 - Note lock: tap the note to keep the strobe on that note name, the octave still follows the detected pitch.
 - Harmonic mode: shows the partials of the detected note across multiple strobe bands.
-- Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
+- Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
 - Strobe response toggle (calm / precision): how fast the strobe spins per cent of detuning.
 - Hertz/Cents display.
 

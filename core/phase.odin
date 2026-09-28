@@ -70,7 +70,7 @@ NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known y
 
 StrobeMode :: enum {
     HARMONIC_MODE, // each track display a harmonic frequency
-    VERNIER_MODE, // displays the same frequency at different sensitivities
+    FINE_MODE, // displays the same frequency at different sensitivities
 }
 
 
@@ -203,7 +203,7 @@ set_phase_comparator_intervals :: proc(self: ^PhaseComparator, strobe_intervals:
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
     speed: f32 = base_speed
 
-    if self.mode == .VERNIER_MODE {
+    if self.mode == .FINE_MODE {
         for &band in self.bands {
             band.speed = speed
             speed *= self.speed_multiplier
@@ -256,7 +256,7 @@ set_phase_comparator_freq :: proc(
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = band.interval * base_freq_hz
             band.speed = speed * band.interval
-        } else if self.mode == .VERNIER_MODE {
+        } else if self.mode == .FINE_MODE {
             band.freq_hz = base_freq_hz
             band.speed = speed
             speed *= speed_multiplier
@@ -404,7 +404,7 @@ determine_band_phase :: proc(
         // Scale down by factor
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
     } else {
-        // Vernier mode - only the base band needs to run the DFT, other bands display varying speeds
+        // Fine mode - only the base band needs to run the DFT, other bands display varying speeds
         base_band := self.bands[0]
         band.amp = base_band.amp
         band.phase_diff = base_band.phase_diff
@@ -512,7 +512,7 @@ update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_i
             }
         }
     } else {
-        // Vernier mode - only the base band needs to calculate the noise floor
+        // Fine mode - only the base band needs to calculate the noise floor
         base_band := self.bands[0]
         band.noise_floor = base_band.noise_floor
         band.snr_db = base_band.snr_db

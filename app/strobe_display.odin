@@ -402,7 +402,7 @@ draw_strobe_bands :: proc(
         set_shader_uniforms(self.strobe_shader, uniforms)
         draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})
 
-        if phase_info.mode == .VERNIER_MODE {
+        if phase_info.mode == .FINE_MODE {
             period_count *= 2.0
         }
     }
