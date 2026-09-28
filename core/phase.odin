@@ -18,9 +18,10 @@
 
     Phase comparator
 
-    Runs two single bin DFTs separated by a hop size and compares their phases.
-    The frequency deviation is detected by comparing the expected phase shift for the target frequency
-    against the measured phase offset.
+    Lock-in amplifier: runs a single bin DFT over the newest samples and demodulates it against a
+    reference oscillator running at the target frequency on an absolute sample clock. In tune, the
+    resulting phase stands still; a detuned signal makes it rotate at the frequency difference.
+    A small Kalman filter tracks that phase and its rate, weighting each measurement by the band SNR.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -32,13 +33,32 @@ import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/cmplx"
+import "core:math/linalg"
+import "core:slice"
 import "core:testing"
 
 
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 8
 MAX_WINDOW_SIZE :: 262_144
-MAX_HOP_SIZE :: 4096
+
+// The strobe phase of each band is rescaled to this frequency so that every note spins at the same
+// rate per cent of detuning. Matches the speed of the previous hop-based phase difference at 120 FPS.
+STROBE_REFERENCE_HZ :: 656.5
+
+// Phase tracker (Kalman filter) process noise, i.e. how much the phase and frequency of a real string
+// are expected to wander on their own. Larger values follow the measurement more closely.
+TRACKER_PHASE_NOISE_RAD :: 0.05 // rad per √s
+TRACKER_FREQ_NOISE_CENTS :: 10.0 // cents per √s
+TRACKER_INITIAL_FREQ_CENTS :: 50.0 // frequency uncertainty after a reset
+TRACKER_MAX_MEASUREMENT_VAR :: 10.0 // rad², weak signals are effectively ignored
+
+// The pitch of a plucked string glides down from sharp during the attack. The tracker trusts the
+// measurement less while the attack is still inside the analysis window.
+ONSET_RATIO :: 1.5 // amp jump over the slow envelope that counts as a new pluck (~3.5 dB)
+ONSET_ENVELOPE_TIME_S :: 0.3
+ONSET_HOLD_S :: 0.1 // extra time after the attack reaches the window centre
+ONSET_MIN_MEASUREMENT_VAR :: 0.05 // rad²
 
 
 StrobeMode :: enum {
@@ -48,7 +68,6 @@ StrobeMode :: enum {
 
 
 PhaseBand :: struct {
-    hop_size:                     int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
     freq_hz:                      f32,
     interval:                     f32, // interval ratio, eg 1x for base note, 1.5x for perfect fifth,  2x for octave, etc
     note:                         Note,
@@ -58,9 +77,9 @@ PhaseBand :: struct {
     dft_config:                   SingleFreqDFT,
     intp_dft_config:              IntpSingleFreqDFT,
     time_stretch:                 f32,
-    phase:                        f32, // actual measured phase
+    phase:                        f32, // measured lock-in phase, relative to the reference oscillator
     amp:                          f32,
-    phase_diff:                   f32, // phase difference between detection frames
+    phase_diff:                   f32, // strobe phase advance since the previous frame (normalized to STROBE_REFERENCE_HZ)
     err_cents:                    f32,
     scaled_phase:                 f32, // phase scaled based on desired strobe speed
 
@@ -69,6 +88,25 @@ PhaseBand :: struct {
     snr_db:                       f32,
     noise_floor:                  f32,
     noise_floor_snr_db_threshold: f32,
+
+    // Lock-in reference oscillator frequency, radians per sample
+    ref_omega:                    f64,
+
+    // Phase tracker state: unwrapped phase (rad) and frequency offset (rad/sample) vs the reference
+    tracker:                      PhaseTracker,
+
+    // Onset detection
+    envelope:                     f32,
+    onset_hold:                   int, // samples left during which the attack is distrusted
+}
+
+
+// 2-state Kalman filter following the lock-in phase: [phase, frequency offset]
+PhaseTracker :: struct {
+    active: bool,
+    phase:  f64,
+    omega:  f64,
+    p:      matrix[2, 2]f64, // covariance
 }
 
 
@@ -84,6 +122,12 @@ PhaseComparator :: struct {
     samplerate:         f32,
     mode:               StrobeMode,
     available:          int,
+
+    // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
+    sample_clock:       i64,
+
+    // Number of valid samples in sample_buffer, the newest sample sits at sample_buffer[buffer_len - 1]
+    buffer_len:         int,
 }
 
 
@@ -98,7 +142,7 @@ init_phase_comparator :: proc(
 
     init_audio_capture_node(self, "phase-tracker")
 
-    self.sample_buffer = make([]f32, MAX_WINDOW_SIZE + MAX_HOP_SIZE)
+    self.sample_buffer = make([]f32, MAX_WINDOW_SIZE)
 
     self.mode = mode
     self.base_freq_hz = base_freq_hz
@@ -181,7 +225,7 @@ set_phase_comparator_freq :: proc(
         return
     }
 
-    flush_audio_capture_ringbuffer(self)
+    // NOTE: keep the ring buffer, the samples are still valid and the stream stays contiguous
 
     self.base_freq_hz = base_freq_hz
     self.mode = mode
@@ -196,6 +240,9 @@ set_phase_comparator_freq :: proc(
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
         band.noise_floor = 10e-6
+        band.tracker = {}
+        band.envelope = 0.0
+        band.onset_hold = 0
 
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = band.interval * base_freq_hz
@@ -207,9 +254,9 @@ set_phase_comparator_freq :: proc(
         }
         band.note = find_note(band.freq_hz)
         band.norm_freq = band.freq_hz / self.samplerate
+        band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
 
         if self.mode == .HARMONIC_MODE || i == 0 {
-            band.hop_size = best_hop_size(25, band.freq_hz, self.samplerate)
             window_size := best_dft_window_size(band.freq_hz, self.samplerate, 25)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
             set_intp_dft_freq(&band.intp_dft_config, window_size, band.freq_hz, self.samplerate, 5)
@@ -217,20 +264,19 @@ set_phase_comparator_freq :: proc(
     }
 }
 
-// Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-unwrap_phase :: proc(phase: f32) -> f32 {
-    phase := phase
-    for phase > math.PI do phase -= math.TAU
-    for phase < -math.PI do phase += math.TAU
-    return phase
+// Handle the jump from 2π to 0 or 0 to 2π (both rotation directions), wraps to -π..π
+wrap_phase :: proc(phase: f64) -> f64 {
+    return phase - math.TAU * math.round(phase / math.TAU)
 }
 
 
 run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> (f32, f32, bool) {
     base_band := &self.bands[0]
 
+    // The base band has the lowest frequency and therefore the longest window.
     // Need to keep this buffer slice relatively small to keep the display refresh without latency.
-    available := audio_capture_read(self, self.sample_buffer[:base_band.dft_config.window_size])
+    resize_sample_buffer(self, base_band.dft_config.window_size)
+    available := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
 
     // Skip when there are no new samples, the scaled phase stays the same
     if available <= 0 {
@@ -238,6 +284,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> 
     }
 
     self.available = int(available)
+    self.sample_clock += i64(available)
 
     for &band, band_idx in self.bands {
         determine_band_phase(self, &band, band_idx, use_phase_average)
@@ -273,33 +320,20 @@ test_best_dft_window_size :: proc(t: ^testing.T) {
 }
 
 
-// Max hop size for staying within cents offset tolerance
-// The cents_offset is the smallest tuning drift to track per update.
-best_hop_size :: proc(cents_offset: int, freq_hz: f32, samplerate: f32) -> int {
-    ratio := libc.exp2(f32(cents_offset) / 1200.0)
-    freq_max := freq_hz * ratio
-    freq_deviation := freq_max - freq_hz
+// Keep the newest samples aligned to the end of the buffer when the window size changes, so the buffer
+// always holds one contiguous stretch of audio ending at sample_clock.
+@(private)
+resize_sample_buffer :: proc(self: ^PhaseComparator, size: int) {
+    if size == self.buffer_len do return
 
-    // Range 0.0 to 1.0
-    // Hop size increases or decreases proportionally from.
-    // Larger values result in longer time between updates but more robust to noise/jitter.
-    // Smaller values decrease hop size and get finer resolution but more vulnerable to phase noise.
-    target_phase_shift: f32 = 0.5
-
-    hop := math.ceil(target_phase_shift * samplerate / (math.TAU * freq_deviation))
-    // fmt.println("hop", freq_hz, hop)
-    return int(hop)
-}
-
-@(test)
-test_best_hop_size :: proc(t: ^testing.T) {
-    v1 := best_hop_size(100, 110.0, 48_000)
-    v2 := best_hop_size(100, 440.0, 48_000)
-    v3 := best_hop_size(100, 4186.0, 48_000)
-
-    testing.expect_value(t, v1, 584)
-    testing.expect_value(t, v2, 146)
-    testing.expect_value(t, v3, 16)
+    if size < self.buffer_len {
+        copy(self.sample_buffer[:size], self.sample_buffer[self.buffer_len - size:self.buffer_len])
+    } else {
+        copy(self.sample_buffer[size - self.buffer_len:size], self.sample_buffer[:self.buffer_len])
+        // Older audio is unknown, fill with silence
+        slice.zero(self.sample_buffer[:size - self.buffer_len])
+    }
+    self.buffer_len = size
 }
 
 
@@ -309,52 +343,121 @@ determine_band_phase :: proc(
     band_idx: int,
     use_phase_average: bool,
 ) {
-    dft: complex64 = complex(0, 0)
-
     // Harmonic mode - each band tracks a separate frequency
-    // Run a single bin DFT and estimate frequency based on phase drift
+    // Run a single bin DFT over the newest samples and demodulate it against a reference oscillator
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
+        window_size := band.dft_config.window_size
 
-        hop_size := band.hop_size
+        // Every band analyses the newest samples, i.e. the end of the buffer
+        samples := self.sample_buffer[self.buffer_len - window_size:self.buffer_len]
 
-        // measure phase difference
-        dft_hop: complex64
+        dft: complex64
         if use_phase_average {
-            dft = run_intp_dft(&band.intp_dft_config, self.sample_buffer[:])
-            dft_hop = run_intp_dft(&band.intp_dft_config, self.sample_buffer[hop_size:])
+            dft = run_intp_dft(&band.intp_dft_config, samples)
         } else {
-            dft = run_single_dft(&band.dft_config, self.sample_buffer[:])
-            dft_hop = run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
+            dft = run_single_dft(&band.dft_config, samples)
         }
-        phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
+        band.amp = abs(dft)
 
-        phase_delta = unwrap_phase(phase_delta)
+        // Lock-in / heterodyne: the DFT twiddles restart at 0 for every window, so rotate the result by
+        // the reference oscillator phase at the window start (absolute sample index).
+        // A signal exactly at the reference frequency then yields a constant phase.
+        window_start := self.sample_clock - i64(window_size)
+        ref_phase := math.mod(f64(window_start) * band.ref_omega, math.TAU)
+        lock_in := complex128(dft) * complex(math.cos(ref_phase), -math.sin(ref_phase))
+        band.phase = f32(cmplx.phase(lock_in))
 
-        // how much the phase of a bin should rotate over HOP samples for a signal at frequency f
-        expected_delta := math.TAU * f32(hop_size) * band.norm_freq
-        expected_delta = unwrap_phase(expected_delta)
+        update_onset(self, band, window_size)
 
-        phase_drift := phase_delta - expected_delta
-        phase_drift = unwrap_phase(phase_drift)
+        was_active := band.tracker.active
+        prev_phase := band.tracker.phase
+        update_phase_tracker(self, band)
 
-        // Frequency estimation from phase drift
-        band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
+        // Strobe phase follows the tracked phase, rescaled so all notes spin at the same rate per cent.
+        // No advance on the first frame after a reset, the initial phase is arbitrary.
+        phase_advance := band.tracker.phase - prev_phase if was_active else 0
+        band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
+
+        // Frequency estimation from the tracked frequency offset
+        band.freq_diff_hz = f32(band.tracker.omega * f64(self.samplerate) / math.TAU)
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
-
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
-
-        // adjust the EWMA when large jumps occur
-        band.phase_diff = phase_drift
 
         // Scale down by factor
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
-        band.amp = abs(dft)
     } else {
         // Vernier mode - only the base band needs to run the DFT, other bands display varying speeds
         base_band := self.bands[0]
         band.amp = base_band.amp
         band.phase_diff = base_band.phase_diff
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
+    }
+}
+
+
+// Detect a new pluck (sudden amplitude jump) and distrust the phase until the attack has passed
+@(private)
+update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int) {
+    band.onset_hold = max(band.onset_hold - self.available, 0)
+
+    is_loud := band.snr_db > band.noise_floor_snr_db_threshold
+    if is_loud && band.amp > ONSET_RATIO * band.envelope {
+        // The attack affects the phase until it has passed the window centre
+        band.onset_hold = window_size / 2 + int(ONSET_HOLD_S * self.samplerate)
+    }
+
+    alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * self.samplerate))
+    band.envelope += alpha * (band.amp - band.envelope)
+}
+
+
+// Kalman filter over [phase, frequency offset], the measurement is the wrapped lock-in phase.
+// The measurement noise follows the band SNR: a loud note is tracked closely, a decaying note
+// gradually coasts on its last good frequency instead of wandering with the noise.
+@(private)
+update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
+    tr := &band.tracker
+    measured := f64(band.phase)
+
+    // radians per sample for one cent at this frequency
+    cent_omega := band.ref_omega * (math.pow(2.0, 1.0 / 1200.0) - 1.0)
+
+    if !tr.active {
+        tr.active = true
+        tr.phase = measured
+        tr.omega = 0
+        freq_var := math.pow(TRACKER_INITIAL_FREQ_CENTS * cent_omega, 2)
+        tr.p = {math.PI * math.PI, 0, 0, freq_var}
+        return
+    }
+
+    // Predict
+    dt := f64(self.available)
+    fs := f64(self.samplerate)
+    f := matrix[2, 2]f64{1, dt, 0, 1}
+    q := matrix[2, 2]f64 {
+        TRACKER_PHASE_NOISE_RAD * TRACKER_PHASE_NOISE_RAD / fs * dt, 0,
+        0, math.pow(TRACKER_FREQ_NOISE_CENTS * cent_omega, 2) / fs * dt,
+    }
+    tr.phase += tr.omega * dt
+    tr.p = f * tr.p * linalg.transpose(f) + q
+
+    // Phase noise variance of a phasor in noise ≈ 1 / (2 SNR)
+    EPS :: 1e-12
+    noise_ratio := f64(band.noise_floor) / (f64(band.amp) + EPS)
+    r := clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
+    if band.onset_hold > 0 do r = max(r, ONSET_MIN_MEASUREMENT_VAR)
+
+    // Update, unwrapping the measurement around the prediction
+    innovation := wrap_phase(measured - tr.phase)
+    s := tr.p[0, 0] + r
+    k := [2]f64{tr.p[0, 0] / s, tr.p[1, 0] / s}
+
+    tr.phase += k[0] * innovation
+    tr.omega += k[1] * innovation
+    tr.p = {
+        tr.p[0, 0] - k[0] * tr.p[0, 0], tr.p[0, 1] - k[0] * tr.p[0, 1],
+        tr.p[1, 0] - k[1] * tr.p[0, 0], tr.p[1, 1] - k[1] * tr.p[0, 1],
     }
 }
 
@@ -387,4 +490,48 @@ update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_i
         band.noise_floor = base_band.noise_floor
         band.snr_db = base_band.snr_db
     }
+}
+
+
+@(test)
+test_phase_detection_lock_in :: proc(t: ^testing.T) {
+    SAMPLERATE :: 48_000
+    FRAME :: 400 // samples per display frame at 120 FPS
+    target_hz: f32 = 261.63
+
+    run :: proc(target_hz: f32, detune_cents: f32) -> (err_cents: [2]f32, phase_diff: f32) {
+        intervals := []f32{1, 2}
+        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC_MODE, 10)
+        defer destroy_phase_comparator(pc)
+        set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC_MODE)
+
+        freq := f64(cents_to_freq(detune_cents, target_hz))
+        chunk: [FRAME]f32
+        n := 0
+        for _ in 0 ..< 2 * SAMPLERATE / FRAME {
+            for &s in chunk {
+                phase := math.TAU * freq * f64(n) / SAMPLERATE
+                s = f32(0.1 * math.sin(phase) + 0.05 * math.sin(2 * phase))
+                n += 1
+            }
+            audio_capture_callback(pc, chunk[:])
+            run_phase_detection(pc, false)
+        }
+        return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
+    }
+
+    // In tune: the strobe stands still
+    err, diff := run(target_hz, 0)
+    testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
+    testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
+
+    // Sharp: both bands report the detuning, the strobe phase advances
+    err, diff = run(target_hz, 3)
+    testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
+    testing.expect(t, diff > 0)
+
+    // Flat
+    err, diff = run(target_hz, -7)
+    testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
+    testing.expect(t, diff < 0)
 }

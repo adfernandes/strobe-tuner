@@ -104,18 +104,20 @@ The pitch detection algorithm uses autocorrelation via FFT, following the method
 
 #### Stroboscopic effect
 
-The strobe effect is driven by a phase comparator algorithm based on two successive single-bin DFTs, both tuned to the target note's reference frequency (e.g., 110 Hz). The idea is to extract the phase evolution of the signal at a specific frequency and map that to a visually intuitive strobe motion.
+The strobe effect is driven by a lock-in amplifier (heterodyne) phase comparator built on a single-bin DFT tuned to the target note's reference frequency (e.g., 110 Hz). The idea is to extract the phase of the signal at a specific frequency, relative to a reference oscillator, and map that to a visually intuitive strobe motion.
 
 Core steps:
-- Frequency targeting: Compute a windowed single-bin DFT precisely tuned to the reference frequency.
-- Phase tracking: Track the phase difference between successive DFT results to determine the strobe’s rotational “spin.”
+- Filtering: The input is high-passed once (60 Hz by default) to remove DC, handling noise and low frequency rumble.
+- Frequency targeting: Compute a windowed single-bin DFT over the newest samples, precisely tuned to the reference frequency.
+- Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
+- Phase tracking: A small Kalman filter follows the phase and its rate. Each measurement is weighted by the band's signal-to-noise ratio, so a loud note is tracked closely and a fading note coasts on its last good frequency instead of wandering with the noise. Measurements taken while a fresh pluck is still inside the analysis window (when the pitch glides down from sharp) are trusted less.
 - Amplitude mapping: The signal amplitude controls brightness or contrast, making the strobe effect visually respond to signal strength.
 
-When the input pitch matches the reference, the phase remains stable, and the strobe appears stationary. Pitch deviations cause the phase to advance or lag, creating a visually drifting effect proportional to the tuning error.
+To maintain a consistent amount of visual drift across the frequency spectrum, the window length is based on musical pitch intervals (in cents) rather than absolute frequency, and the strobe phase is rescaled so each note spins at the same rate per cent of detuning.
 
-To maintain consistent similar amount of visual drift across the frequency spectrum, the algorithm adjusts hop size and window length based on musical pitch intervals (in cents) rather than absolute frequency. 
+The single-bin DFT also serves as a narrowband filter, providing a clean strobe signal while still allowing nearby frequencies to influence the display. The amount of visual drift per cent can be scaled directly by multiplying the tracked phase — allowing customizable strobe sensitivity.
 
-The single-bin DFT also serves as a narrowband filter, providing a clean strobe signal while still allowing nearby frequencies to influence the display. The amount of visual drift per cent can be scaled directly by multiplying the measured phase difference — allowing customizable strobe sensitivity.
+In automatic mode a newly detected note has to be seen several times in a row (3 by default) before the strobe switches to it, so a single noisy detection of a decaying note doesn't reset the display.
 
 
 #### Alternative approaches I have tried

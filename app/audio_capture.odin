@@ -29,11 +29,17 @@ import pa "../external/odin-portaudio"
 import "../core"
 
 
+// Max samples filtered in one go, larger callbacks are processed in chunks
+FILTER_CHUNK_SIZE :: 4096
+
 AudioCapture :: struct {
-    active_device: i32,
-    stream:        ^pa.Stream,
-    nodes:         [dynamic]^core.AudioCaptureNode,
-    samplerate:    u32,
+    active_device:      i32,
+    stream:             ^pa.Stream,
+    nodes:              [dynamic]^core.AudioCaptureNode,
+    samplerate:         u32,
+    highpass_cutoff_hz: f32,
+    highpass:           core.Biquad,
+    filtered:           []f32, // high-passed copy of the input, shared by all nodes
 }
 
 audio_device_count :: pa.GetDeviceCount
@@ -47,6 +53,9 @@ switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
     for node in self.nodes {
         core.flush_audio_capture_ringbuffer(node)
     }
+
+    // Reset the filter state, the previous device's signal is unrelated
+    self.highpass = core.init_highpass(self.highpass_cutoff_hz, f32(self.samplerate))
 
     self.active_device = device_index
     info := pa.GetDeviceInfo(device_index)
@@ -87,11 +96,14 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
 
 // TODO can't listen to default input device refresh without hotplug
 // https://github.com/PortAudio/portaudio/wiki/HotPlug
-init_audio_capture :: proc(samplerate: u32) -> (bool, ^AudioCapture) {
+init_audio_capture :: proc(samplerate: u32, highpass_cutoff_hz: f32) -> (bool, ^AudioCapture) {
     err: pa.Error
 
     self := new(AudioCapture)
     self.samplerate = samplerate
+    self.highpass_cutoff_hz = highpass_cutoff_hz
+    self.highpass = core.init_highpass(highpass_cutoff_hz, f32(samplerate))
+    self.filtered = make([]f32, FILTER_CHUNK_SIZE)
 
     err = pa.Initialize()
     if check(err) do return false, self
@@ -149,6 +161,7 @@ destroy_audio_capture :: proc(self: ^AudioCapture) {
     fmt.println("Terminated PortAudio")
 
     delete(self.nodes)
+    delete(self.filtered)
     free(self)
 }
 
@@ -172,10 +185,18 @@ stream_callback :: proc "c" (
 
     self := cast(^AudioCapture)userData
 
-    // process all nodes
-    for node in self.nodes {
-        if node.stream_callback != nil {
-            node.stream_callback(node, input_slice)
+    // High-pass once for all nodes to strip DC and low frequency rumble from the mic
+    for len(input_slice) > 0 {
+        n := min(len(input_slice), len(self.filtered))
+        chunk := self.filtered[:n]
+        core.biquad_process(&self.highpass, input_slice[:n], chunk)
+        input_slice = input_slice[n:]
+
+        // process all nodes
+        for node in self.nodes {
+            if node.stream_callback != nil {
+                node.stream_callback(node, chunk)
+            }
         }
     }
 

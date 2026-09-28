@@ -112,6 +112,12 @@ Config :: struct {
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
 
+    // number of consecutive pitch detections of a new note before the strobe switches to it
+    note_switch_confirmations:    int,
+
+    // high-pass filter on the input to remove DC and low frequency rumble, 0 to disable
+    highpass_cutoff_hz:           f32,
+
     // AGC settings
     auto_gain_control:            bool,
     auto_gain_snr_db_low:         f32,
@@ -157,6 +163,8 @@ config_defaults :: Config {
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 2, // dB
+    note_switch_confirmations    = 3, // ~150ms at 20 detections per second, the last one must be strong
+    highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower it for bass
     auto_gain_control            = false,
     auto_gain_snr_db_low         = 30, // dB
     auto_gain_snr_db_high        = 50, // dB

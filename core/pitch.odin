@@ -42,6 +42,7 @@ PitchDetector :: struct {
 
 PitchInfo :: struct {
     measured:        bool,
+    fresh:           bool, // a new measurement this frame, false when repeating the previous one
     detected_freq:   f32,
     detected_note:   Note,
     clarity:         f32,
@@ -107,12 +108,17 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     )
 
     // no new audio samples available, skip pitch detection
-    if available <= 0 do return prev_info
+    if available <= 0 {
+        stale := prev_info
+        stale.fresh = false
+        return stale
+    }
 
     // d := time.tick_lap_time(&tick)
     // fmt.println("pitch", time.duration_milliseconds(d), available, self.nsdf.samplerate)
 
     info.measured = true
+    info.fresh = true
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
     info.rms = math.max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)

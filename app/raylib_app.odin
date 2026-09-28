@@ -61,6 +61,13 @@ run_raylib_app :: proc(config: ^Config) {
     // Target note for tuning via the strobe effect
     target_note := core.Note{}
 
+    // A newly detected note must be seen several times in a row before the strobe switches to it,
+    // otherwise a single noisy detection of a decaying note resets the strobe.
+    candidate_note := core.Note {
+        cents = -1,
+    }
+    candidate_count := 0
+
     // Save target note to config when exiting the app
     defer config.target_freq_hz = target_note.frequency
 
@@ -112,7 +119,7 @@ run_raylib_app :: proc(config: ^Config) {
     defer core.destroy_pitch_detector(&pitch_detector)
 
 
-    ok, audio_capture := init_audio_capture(u32(config.samplerate))
+    ok, audio_capture := init_audio_capture(u32(config.samplerate), config.highpass_cutoff_hz)
     if !ok do return
     defer destroy_audio_capture(audio_capture)
 
@@ -232,10 +239,25 @@ run_raylib_app :: proc(config: ^Config) {
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
+        // Count consecutive detections of the same note, only for new measurements.
+        // Medium clarity detections count too, a short pluck may only be "strong" briefly,
+        // but the switch itself still needs a strong detection (see below).
+        if pitch_info.fresh {
+            if pitch_info.is_weak_pitch {
+                candidate_count = 0
+            } else if candidate_note.cents == pitch_info.detected_note.cents {
+                candidate_count += 1
+            } else {
+                candidate_note = pitch_info.detected_note
+                candidate_count = 1
+            }
+        }
+        note_confirmed := candidate_count >= config.note_switch_confirmations
+
         // Keep previous measurement if there is no detected note
         if pitch_info.is_strong_pitch {
             last_good_pitch_info = pitch_info
-            if detected_note.cents != pitch_info.detected_note.cents {
+            if note_confirmed && detected_note.cents != pitch_info.detected_note.cents {
                 is_octave := core.octave_apart(detected_note, pitch_info.detected_note)
                 detected_note = pitch_info.detected_note
                 target_note = detected_note
