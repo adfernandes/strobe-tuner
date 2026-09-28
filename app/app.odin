@@ -155,6 +155,7 @@ run_app :: proc(config: ^Config) {
 
     note_low_state := false
     note_high_state := false
+    arrow_pulse_phase: f32 = 0
 
 
     color1 := hex(config.strobe_color_1)
@@ -375,13 +376,39 @@ run_app :: proc(config: ^Config) {
                 config,
             )
 
-            if freq_estimation_active {
-                note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
-                note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
+            // Only the strong readings, a fading note drifts and would flash the arrows
+            arrow_cents_err := core.cents_deviation(last_good_pitch_info.detected_freq, target_note.frequency)
+            distance := abs(arrow_cents_err)
 
+            // Without a lock, further than half a semitone is a neighbouring note that isn't confirmed yet
+            if freq_estimation_active && (note_locked || distance <= 50) {
+                note_low_state = core.schmitt_trigger_neg(note_low_state, arrow_cents_err, -8, -10)
+                note_high_state = core.schmitt_trigger(note_high_state, arrow_cents_err, 8, 10)
+
+                // Far from a locked note the strobe means nothing, the arrow pulses instead: slowly an octave
+                // or more away, quicker as the string comes closer, steady within 50 cents
+                arrow_color := hex(0x82E2FFFF)
+                if note_locked && distance > 50 {
+                    closeness := clamp((1200 - distance) / (1200 - 50), 0, 1)
+                    pulse_hz := math.lerp(f32(0.5), 2.5, closeness)
+                    arrow_pulse_phase = math.mod(arrow_pulse_phase + pulse_hz * gfx_frame_time(), 1)
+                    // A gentle breathing between half and full brightness
+                    brightness := 0.75 + 0.25 * math.cos(2 * math.PI * arrow_pulse_phase)
+                    arrow_color.a = u8(255 * brightness)
+                } else {
+                    arrow_pulse_phase = 0
+                }
+
+                // Drawn from the large font so they stay sharp on 3x screens
+                ARROW_SIZE :: 22
                 arrow_y := layout.strobe_top + 10
-                if note_low_state do draw_text(font_store.medium_32, "◀", {layout.strobe.x + 10, arrow_y}, 16, 0, hex(0x82E2FFFF))
-                else if note_high_state do draw_text(font_store.medium_32, "▶", {layout.strobe.x + layout.strobe.width - 22, arrow_y}, 16, 0, hex(0x82E2FFFF))
+                if note_low_state {
+                    draw_text(font_store.medium_192, "◀", {layout.strobe.x + 10, arrow_y}, ARROW_SIZE, 0, arrow_color)
+                } else if note_high_state {
+                    arrow_width := measure_text(font_store.medium_192, "▶", ARROW_SIZE, 0).x
+                    arrow_x := layout.strobe.x + layout.strobe.width - 10 - arrow_width
+                    draw_text(font_store.medium_192, "▶", {arrow_x, arrow_y}, ARROW_SIZE, 0, arrow_color)
+                }
             }
 
 
