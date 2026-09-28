@@ -99,8 +99,8 @@ Config :: struct {
     strobe_blur:                  bool,
     // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
     motion_blur:                  bool,
-    // lamp-lit look of the old mechanical strobe tuners
-    strobe_glow:                  bool,
+    // lamp-lit look of the old mechanical strobe tuners, see GLOW_PRESETS
+    strobe_glow:                  GlowPreset,
     prevent_strobe_octave_jumps:  bool,
 
     tuning_preset:                TuningPreset,
@@ -152,7 +152,7 @@ config_defaults :: Config {
     strobe_colorway              = .VIBRANT_RED,
     strobe_blur                  = true,
     motion_blur                  = true,
-    strobe_glow                  = true,
+    strobe_glow                  = .AMBER,
     prevent_strobe_octave_jumps  = true,
 
     // Custom colors
@@ -203,8 +203,7 @@ load_config :: proc() -> Config {
             named := field.type.variant.(reflect.Type_Info_Named)
             value, ok := reflect.enum_from_name_any(field.type.id, section[field.name])
             if ok {
-                ptr_int := cast(^int)ptr
-                ptr_int^ = cast(int)value
+                write_int_field(ptr, field.type.size, int(value))
             }
         case reflect.Type_Info_Float:
             value, ok := strconv.parse_f32(section[field.name])
@@ -213,10 +212,17 @@ load_config :: proc() -> Config {
                 ptr_f32^ = value
             }
         case reflect.Type_Info_Integer:
-            value, ok := strconv.parse_int(section[field.name])
+            str := section[field.name]
+            value: int
+            ok: bool
+            // Colors are hex, older configs were saved with an uppercase 0X prefix that parse_int rejects
+            if field.tag == "color" && (strings.has_prefix(str, "0x") || strings.has_prefix(str, "0X")) {
+                value, ok = strconv.parse_int(str[2:], 16)
+            } else {
+                value, ok = strconv.parse_int(str)
+            }
             if ok {
-                ptr_int := cast(^int)ptr
-                ptr_int^ = value
+                write_int_field(ptr, field.type.size, value)
             }
         case reflect.Type_Info_Boolean:
             value, ok := strconv.parse_bool(section[field.name])
@@ -248,6 +254,23 @@ load_config :: proc() -> Config {
 }
 
 
+// Write with the field's own size, writing a full int into a smaller field clobbers the next one
+@(private)
+write_int_field :: proc(ptr: rawptr, size: int, value: int) {
+    switch size {
+    case 1:
+        (^u8)(ptr)^ = u8(value)
+    case 2:
+        (^u16)(ptr)^ = u16(value)
+    case 4:
+        (^u32)(ptr)^ = u32(value)
+    case 8:
+        (^int)(ptr)^ = value
+    case:
+        fmt.println("Unsupported config field size", size)
+    }
+}
+
 save_config :: proc(config: Config) {
     ini_map := ini.Map{}
     defer ini.delete_map(ini_map)
@@ -259,7 +282,7 @@ save_config :: proc(config: Config) {
         value := reflect.struct_field_value(config, field)
         key := strings.clone(field.name)
         if field.tag == "color" {
-            section[key] = fmt.aprintf("%#X", value)
+            section[key] = fmt.aprintf("%#x", value)
         } else {
             section[key] = fmt.aprintf("%v", value)
         }

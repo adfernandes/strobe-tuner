@@ -25,6 +25,9 @@ out vec4 finalColor;
 
 const float TAU = radians(360);
 
+// Share of the lamp light the dark stripes let through
+const float DARK_TRANSMISSION = 0.3;
+
 // Uniforms
 uniform vec4 bounding_rect;
 uniform float curvature_radius;
@@ -38,6 +41,9 @@ uniform float phase_step; // change of phase since the previous frame
 uniform int motion_blur;
 uniform int glow;
 uniform float lamp_spread; // angular width of the lamp hotspot in radians
+uniform vec3 glow_color;
+uniform float glow_exposure; // how hard the lamp drives the exposure curve, higher washes lit stripes out
+uniform float glow_saturation; // 1 keeps the full color, lower mixes in gray
 uniform float amp;
 uniform float norm_freq;
 uniform float band_height;
@@ -190,42 +196,29 @@ void main()
         // Stripes drawn in color_a are the lit ones
         float lit = 1.0 - signal_value;
 
-        // Light scattering into the dark stripes, a soft copy of the pattern (just the fundamental)
-        float scatter = 1.0 - generate_blurred_signal(
-            norm_freq,
-            phase,
-            motion_blur > 0 ? phase_step : 0.0,
-            1.0,
-            time,
-            time_stretch,
-            period_count,
-            true
-        );
-
-        // Lamp hotspot, brightest around the top centre of the arcs and the middle bands
+        // Lamp hotspot, sits behind the inner band at the top centre of the arcs.
+        // The outer bands fall off in brightness, so each band gets its own tone.
         float radial_position = length(distance);
         float radial_t = (radial_position - min_radius) / max(max_radius - min_radius, 1.0);
         float angle_offset = (angle - 0.25 * TAU) / lamp_spread;
-        float hotspot = exp(-angle_offset * angle_offset - 1.5 * (radial_t - 0.45) * (radial_t - 0.45));
+        float hotspot = exp(-angle_offset * angle_offset - 2.0 * radial_t * radial_t);
 
-        float emission = clamp(lit + 0.15 * scatter, 0.0, 1.0) * mix(0.7, 1.0, hotspot);
+        // Light model: the lamp shines through a colored filter, the stripes modulate how much gets through.
+        // Dark stripes still pass some light, so they read as deep saturated color rather than an opaque surface.
+        float lamp = mix(0.6, 1.0, hotspot) * glow_exposure;
 
-        // Incandescent lamp, warms the lit stripes towards amber rather than burning them white
-        vec3 lamp = vec3(1.0, 0.62, 0.28);
-        vec3 warm = mix(color_a, lamp, 0.45 * mix(0.6, 1.0, hotspot));
+        // Filter hue, squared to saturate it (FF6767 -> 1.0, 0.16, 0.16)
+        vec3 filter_color = glow_color / max(max(glow_color.r, glow_color.g), max(glow_color.b, 0.001));
+        filter_color *= filter_color;
 
-        // Dark stripes still glow faintly
-        rgb = mix(color_b * 0.7, warm, emission);
-        rgb *= mix(0.85, 1.1, hotspot);
-        rgb = min(rgb, vec3(1.0));
-
-        // Halo spilling a few pixels past the track edges into the gaps
-        float inner_radius = curvature_radius - thickness;
-        float outside = max(radial_position - curvature_radius, inner_radius - radial_position);
-        float halo = exp(-max(outside, 0.0) / 3.0) * step(0.0, outside) * step(outside, 8.0);
-        halo *= 0.25 * emission;
-        alpha = max(alpha, halo);
-        rgb = mix(rgb, warm, clamp(halo * (1.0 - curved_track), 0.0, 1.0));
+        // Exposure curve per channel, bright light rolls off from saturated color towards pale gold/white,
+        // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
+        // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
+        // pick up the curve's most saturated color and show up as red fringes.
+        vec3 lit_rgb = 1.0 - exp(-lamp * filter_color);
+        vec3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * filter_color);
+        rgb = mix(dark_rgb, lit_rgb, lit);
+        rgb = mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, glow_saturation);
     }
 
 

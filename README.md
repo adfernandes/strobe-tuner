@@ -29,7 +29,7 @@ A simple stroboscopic instrument tuner.
 - <kbd>←</kbd><kbd>→</kbd> &nbsp;  left/right arrow to move selected note up or down chromatically.
 - <kbd>↑</kbd><kbd>↓</kbd> &nbsp;  up/down arrow to move selected note up and down by octave.
 - <kbd>tab</kbd> &nbsp;  switch the strobe display type to a full wheel.
-- <kbd>G</kbd> &nbsp;  toggle the lamp glow effect on the strobe.
+- <kbd>G</kbd> &nbsp;  cycle the lamp glow on the strobe: amber, red, off.
 - <kbd>space</kbd> &nbsp; switch note detection modes between auto & manual.
 
 

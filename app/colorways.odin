@@ -28,6 +28,25 @@ minty: [2]u32 : {0xB5F2DBFF, 0x6B3D7DFF}
 vibrant_red: [2]u32 : {0xFF6767FF, 0x6B4949FF}
 
 
+// Lamp glow on the strobe, cycled with G
+GlowPreset :: enum {
+    OFF,
+    AMBER,
+    RED,
+}
+
+GlowParams :: struct {
+    color:      u32, // filter hue the lamp shines through
+    exposure:   f32, // higher shifts the lit stripes towards yellow/white
+    saturation: f32, // 1 keeps the full color, lower mixes in gray
+}
+
+GLOW_PRESETS := [GlowPreset]GlowParams {
+    .OFF   = {},
+    .AMBER = {color = 0xFF803CFF, exposure = 4.5, saturation = 0.8},
+    .RED   = {color = 0xFF6767FF, exposure = 3.5, saturation = 1.0},
+}
+
 get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
     switch config.strobe_colorway {
     case .VIBRANT_RED:

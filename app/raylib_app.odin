@@ -341,7 +341,8 @@ run_raylib_app :: proc(config: ^Config) {
         }
 
         if rl.IsKeyPressed(.G) {
-            config.strobe_glow = !config.strobe_glow
+            // Cycle through the glow presets, OFF is first so wrap around to the start
+            config.strobe_glow = GlowPreset((int(config.strobe_glow) + 1) % len(GlowPreset))
         }
 
         if rl.IsKeyPressed(.I) && config.strobe_mode == .HARMONIC_MODE {
