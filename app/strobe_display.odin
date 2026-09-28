@@ -18,7 +18,6 @@ package app
 
 import "core:fmt"
 import "core:math"
-import "core:math/linalg"
 import rl "vendor:raylib"
 
 import "../core"
@@ -46,6 +45,8 @@ StrobeDisplay :: struct {
     time_stretch_loc:      i32,
     period_count_loc:      i32,
     phase_loc:             i32,
+    phase_step_loc:        i32,
+    motion_blur_loc:       i32,
     amp_loc:               i32,
     norm_freq_loc:         i32,
     bounding_rect_loc:     i32,
@@ -103,6 +104,8 @@ init_strobe_display :: proc(
     self.color_b_loc = rl.GetShaderLocation(self.strobe_shader, "color_b")
     self.time_stretch_loc = rl.GetShaderLocation(self.strobe_shader, "time_stretch")
     self.phase_loc = rl.GetShaderLocation(self.strobe_shader, "phase")
+    self.phase_step_loc = rl.GetShaderLocation(self.strobe_shader, "phase_step")
+    self.motion_blur_loc = rl.GetShaderLocation(self.strobe_shader, "motion_blur")
     self.amp_loc = rl.GetShaderLocation(self.strobe_shader, "amp")
     self.norm_freq_loc = rl.GetShaderLocation(self.strobe_shader, "norm_freq")
     self.bounding_rect_loc = rl.GetShaderLocation(self.strobe_shader, "bounding_rect")
@@ -191,6 +194,14 @@ draw_strobe_display :: proc(
         self.strobe_shader,
         self.strobe_blur_loc,
         &strobe_blur,
+        rl.ShaderUniformDataType.INT,
+    )
+
+    motion_blur := i32(config.motion_blur)
+    rl.SetShaderValue(
+        self.strobe_shader,
+        self.motion_blur_loc,
+        &motion_blur,
         rl.ShaderUniformDataType.INT,
     )
 
@@ -285,6 +296,15 @@ draw_strobe_display :: proc(
             rl.ShaderUniformDataType.FLOAT,
         )
 
+        // How far the strobe moved this frame, see determine_band_phase
+        phase_step := -band.phase_diff * band.speed
+        rl.SetShaderValue(
+            self.strobe_shader,
+            self.phase_step_loc,
+            &phase_step,
+            rl.ShaderUniformDataType.FLOAT,
+        )
+
         amp := self.contrast * band.amp
 
         self.auto_gain_active[band_idx] = core.schmitt_trigger(
@@ -307,19 +327,6 @@ draw_strobe_display :: proc(
 
         // limit max amp to avoid jagged edges in the strobe display
         amp = clamp(amp, 0.0, 50.0)
-
-        attenuation: f32 = 0.0
-
-        // fade out if the spinning is too rapid
-        if config.apply_attenuation && config.strobe_mode == .VERNIER_MODE {
-            // TBD: if these need to be tweaked some more
-            attenuation = linalg.smoothstep(
-                f32(0.04),
-                f32(0.005),
-                math.abs(band.phase_diff * band.speed),
-            )
-            amp *= attenuation
-        }
 
         rl.SetShaderValue(self.strobe_shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
 

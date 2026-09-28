@@ -34,6 +34,8 @@ uniform vec3 color_b;
 
 uniform float time_stretch;
 uniform float phase;
+uniform float phase_step; // change of phase since the previous frame
+uniform int motion_blur;
 uniform float amp;
 uniform float norm_freq;
 uniform float band_height;
@@ -68,6 +70,49 @@ float generate_signal(
     value = max(min(value, 1.0), 0.0);
 
     return value;
+}
+
+// Average the signal over the phase swept since the previous frame, like a camera shutter would.
+// Without it the pattern aliases (wagon wheel effect) and shimmers once it moves close to
+// half a period per frame.
+float generate_blurred_signal(
+    float freq,
+    float phase,
+    float phase_step,
+    float amplitude,
+    float time,
+    float time_stretch,
+    float period_count,
+    bool strobe_blur
+) {
+    // Radians of the pattern swept during one frame
+    float sweep = abs(period_count * phase_step);
+
+    if (sweep < 0.05) {
+        return generate_signal(freq, phase, amplitude, time, time_stretch, period_count, strobe_blur);
+    }
+
+    // A full period or more averages out to a flat colour, the pattern carries no information
+    if (sweep >= TAU) {
+        return 0.5;
+    }
+
+    // ~24 samples per period is enough to keep the average smooth even for the hard edged square wave
+    const int MAX_SAMPLES = 24;
+    int n = int(clamp(ceil(sweep * float(MAX_SAMPLES) / TAU), 2.0, float(MAX_SAMPLES)));
+
+    float sum = 0.0;
+    for (int i = 0; i < MAX_SAMPLES; i++) {
+        if (i >= n) break;
+        float t = (float(i) + 0.5) / float(n);
+        sum += generate_signal(freq, phase - t * phase_step, amplitude, time, time_stretch, period_count, strobe_blur);
+    }
+    float value = sum / float(n);
+
+    // Ease the last bit of contrast out, so the pattern doesn't pop when the sweep crosses a full period
+    float fade = 1.0 - smoothstep(0.75 * TAU, TAU, sweep);
+
+    return mix(0.5, value, fade);
 }
 
 float draw_curved_track(
@@ -122,9 +167,10 @@ void main()
     // Time is translated from the linear to radial
     float time = angle / TAU;
 
-    float signal_value = generate_signal(
+    float signal_value = generate_blurred_signal(
         norm_freq,
         phase,
+        motion_blur > 0 ? phase_step : 0.0,
         amp,
         time,
         time_stretch,

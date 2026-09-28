@@ -97,10 +97,10 @@ Config :: struct {
     strobe_color_2:               u32 "color",
     strobe_colorway:              StrobeColorway,
     strobe_blur:                  bool,
+    // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
+    motion_blur:                  bool,
     prevent_strobe_octave_jumps:  bool,
 
-    // attenuate strobe effect when it spins so fast it becomes distracting
-    apply_attenuation:            bool,
     tuning_preset:                TuningPreset,
 
     // show different type of partial labels, eg partial number 1x, note name A2, or frequency 110Hz
@@ -135,7 +135,6 @@ Config :: struct {
 
 @(private)
 config_defaults :: Config {
-    apply_attenuation            = true,
     target_freq_hz               = 110.0,
     pitch_standard               = 440.0,
     strobe_intervals             = {1, 2, 4, 0, 0, 0, 0, 0},
@@ -150,6 +149,7 @@ config_defaults :: Config {
     strobe_display_type          = .CURVED_TRACKS,
     strobe_colorway              = .VIBRANT_RED,
     strobe_blur                  = true,
+    motion_blur                  = true,
     prevent_strobe_octave_jumps  = true,
 
     // Custom colors
