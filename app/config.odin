@@ -88,6 +88,9 @@ Config :: struct {
     // show different type of partial labels, eg partial number 1x, note name A2, or frequency 110Hz
     partial_labels:               PartialLabelType,
 
+    // all the notes in a sliding row, off shows just the note with arrows either side to step it
+    chromatic_ruler:              bool,
+
     // pitch detection settings
     pitch_detection_clarity_low:  f32,
     pitch_detection_clarity_high: f32,
@@ -132,6 +135,7 @@ config_defaults :: Config {
 
     //
     partial_labels               = .MULTIPLES,
+    chromatic_ruler              = true,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor

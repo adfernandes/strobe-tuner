@@ -24,11 +24,12 @@ Layout :: struct {
     strobe:         Rect,
     strobe_top:     f32, // top of the visible strobe, below the notch
     strobe_scale:   f32, // size of the strobe tracks relative to the desktop
-    note:           [2]f32,
+    ruler:          Rect,
+    note:           [2]f32, // top left of the note without the ruler
     measurements:   [2]f32, // top right
     stats:          [2]f32,
-    lock:           Rect,
-    response:       Rect,
+    lock:           [2]f32, // left edge of the LED toggles, vertically centred
+    response:       [2]f32,
     level_meter:    [2]f32,
     settings:       [2]f32,
 }
@@ -37,49 +38,53 @@ Layout :: struct {
 PORTRAIT_ASPECT :: 1.3
 PANEL_PADDING :: 16
 
-BUTTON_HEIGHT :: 32
-BUTTON_GAP :: 12
+// The LED toggles share a row, the second one starts this far after the first
+TOGGLE_SPACING :: 150
 
-// The two buttons share a row, half each
 @(private = "file")
-button_row :: proc(l: ^Layout, left, right, y: f32) {
-    width := (right - left - BUTTON_GAP) / 2
-    l.lock = {left, y, width, BUTTON_HEIGHT}
-    l.response = {left + width + BUTTON_GAP, y, width, BUTTON_HEIGHT}
+toggle_row :: proc(l: ^Layout, left, y: f32) {
+    l.lock = {left, y}
+    l.response = {left + TOGGLE_SPACING, y}
 }
 
-// Where the right arrow ends, the readout keeps clear of it
+RULER_HEIGHT :: 110
+// Centred under the ruler, without it right aligned with the values on the baseline of the note letter
+READOUT_WIDTH :: HZ_COLUMN_OFFSET + 75 // enough for "4186.0"
+READOUT_HEIGHT :: 48
+READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
+
+// Where the right arrow of the note ends, the readout keeps clear of it
 @(private = "file")
 note_right :: proc(l: Layout) -> f32 {
     return l.note.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET + NOTE_ARROW_SLOT
 }
 
-// The readout values sit on the baseline of the note letter
-READOUT_VALUE_TOP :: NOTE_BASELINE - 30 // the values are 32pt
-READOUT_TOP :: READOUT_VALUE_TOP - 20 // the labels above them
-READOUT_WIDTH :: HZ_COLUMN_OFFSET + 95 // enough for "4186.0"
-READOUT_HEIGHT :: 60
-
-compute_layout :: proc(window: [2]f32, safe: Rect) -> Layout {
-    if window.y > window.x * PORTRAIT_ASPECT do return portrait_layout(window, safe)
-    return desktop_layout()
+compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> Layout {
+    if window.y > window.x * PORTRAIT_ASPECT do return portrait_layout(window, safe, ruler)
+    return desktop_layout(ruler)
 }
 
 @(private = "file")
-desktop_layout :: proc() -> (l: Layout) {
+desktop_layout :: proc(ruler: bool) -> (l: Layout) {
     l.strobe = {0, 0, STROBE_WIDTH, STROBE_HEIGHT}
     l.strobe_scale = 1
-    l.note = {PANEL_PADDING + NOTE_ARROW_SLOT, 303}
-    l.measurements = {STROBE_WIDTH - PANEL_PADDING, l.note.y + READOUT_TOP}
+    if ruler {
+        l.ruler = {PANEL_PADDING, STROBE_HEIGHT + 4, STROBE_WIDTH - 2 * PANEL_PADDING, RULER_HEIGHT}
+        l.measurements = {STROBE_WIDTH / 2 + READOUT_WIDTH / 2, l.ruler.y + RULER_HEIGHT + 6}
+    } else {
+        l.note = {PANEL_PADDING + NOTE_ARROW_SLOT, 303}
+        l.measurements = {STROBE_WIDTH - PANEL_PADDING, l.note.y + READOUT_NOTE_TOP}
+    }
     l.stats = {250, 400}
-    button_row(&l, PANEL_PADDING, STROBE_WIDTH - PANEL_PADDING, 438)
+    // The toggles sit on the bottom row between the level meter and the cog
+    toggle_row(&l, 150, 509)
     l.level_meter = {16, 507}
     l.settings = {477 - SETTINGS_ICON_SIZE, 520 - SETTINGS_ICON_SIZE}
     return
 }
 
 @(private = "file")
-portrait_layout :: proc(window: [2]f32, safe: Rect) -> (l: Layout) {
+portrait_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) {
     left := safe.x + PANEL_PADDING
     right := safe.x + safe.width - PANEL_PADDING
     bottom := safe.y + safe.height - PANEL_PADDING
@@ -90,20 +95,27 @@ portrait_layout :: proc(window: [2]f32, safe: Rect) -> (l: Layout) {
     l.strobe = {0, 0, window.x, safe.y + l.strobe_scale * STROBE_HEIGHT}
     panel := l.strobe.y + l.strobe.height
 
-    l.note = {left + NOTE_ARROW_SLOT, panel - 3}
     l.stats = {left + 131, panel + 80}
 
     // From the bottom up
     l.level_meter = {left, bottom - 10}
     l.settings = {right - SETTINGS_ICON_SIZE, bottom - SETTINGS_ICON_SIZE}
-    button_row(&l, left, right, bottom - 36 - BUTTON_HEIGHT)
+    toggle_row(&l, left, bottom - 52)
 
-    // Next to the note when there's room, otherwise in the middle of the space between it and the buttons
-    if right - READOUT_WIDTH >= note_right(l) + BUTTON_GAP {
-        l.measurements = {right, l.note.y + READOUT_TOP}
+    if ruler {
+        l.ruler = {left, panel + 4, right - left, RULER_HEIGHT}
+        l.measurements = {(left + right) / 2 + READOUT_WIDTH / 2, l.ruler.y + RULER_HEIGHT + 20}
+        return
+    }
+
+    // Next to the note when there's room, otherwise in the middle of the space between it and the toggles
+    l.note = {left + NOTE_ARROW_SLOT, panel - 3}
+    if right - READOUT_WIDTH >= note_right(l) + 12 {
+        l.measurements = {right, l.note.y + READOUT_NOTE_TOP}
     } else {
         note_bottom := l.note.y + NOTE_HEIGHT
-        l.measurements = {right, (note_bottom + l.lock.y - READOUT_HEIGHT) / 2}
+        toggles_top := l.lock.y - 22
+        l.measurements = {right, (note_bottom + toggles_top - READOUT_HEIGHT) / 2}
     }
     return
 }

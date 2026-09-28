@@ -329,7 +329,8 @@ run_app :: proc(config: ^Config) {
             )
         }
 
-        layout := compute_layout(gfx_window_size(), gfx_safe_area())
+        layout := compute_layout(gfx_window_size(), gfx_safe_area(), config.chromatic_ruler)
+        if config.chromatic_ruler do update_ruler_fonts()
 
         // Draw the GUI controls
         gfx_begin_frame(hex(window_bg_color))
@@ -413,10 +414,15 @@ run_app :: proc(config: ^Config) {
 
             // -------------------------------------------------------------------------------------
 
-            draw_note(target_note, layout.note, freq_estimation_active)
-
-            // The lock button (or space) locks the note, the arrows step a locked note by a semitone
-            step := gui_note_arrows(layout.note, note_locked)
+            // The lock button (or space) locks the note, tapping another note on the ruler (or the arrows)
+            // locks that one instead
+            step: int
+            if config.chromatic_ruler {
+                step = gui_note_ruler(layout.ruler, target_note, note_locked, freq_estimation_active)
+            } else {
+                draw_note(target_note, layout.note, freq_estimation_active)
+                step = gui_note_arrows(layout.note, note_locked)
+            }
             lock_toggled := gui_lock_toggle(layout.lock, note_locked)
             if key_pressed(.SPACE) do lock_toggled = true
             if key_pressed(.LEFT) do step = -1
@@ -431,8 +437,10 @@ run_app :: proc(config: ^Config) {
             }
             if step != 0 {
                 note_locked = true
-                if step < 0 do target_note = core.prev_chromatic_note(target_note)
-                else do target_note = core.next_chromatic_note(target_note)
+                for _ in 0 ..< abs(step) {
+                    if step < 0 do target_note = core.prev_chromatic_note(target_note)
+                    else do target_note = core.next_chromatic_note(target_note)
+                }
             }
             if target_note.cents != prev_target_note.cents {
                 core.set_phase_comparator_freq(

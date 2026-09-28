@@ -173,7 +173,7 @@ gui_settings :: proc(
 
 // 24pt icon in the middle of a 2x larger touch area
 gui_settings_button :: proc(position: [2]f32) -> bool {
-    draw_icon(ICON_GEAR, position, icon_color, SETTINGS_ICON_SIZE)
+    draw_icon(ICON_SLIDERS, position, icon_color, SETTINGS_ICON_SIZE)
     return gui_button({position.x - 12, position.y - 12, 48, 48})
 }
 
