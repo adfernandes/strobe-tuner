@@ -340,6 +340,10 @@ run_raylib_app :: proc(config: ^Config) {
             }
         }
 
+        if rl.IsKeyPressed(.G) {
+            config.strobe_glow = !config.strobe_glow
+        }
+
         if rl.IsKeyPressed(.I) && config.strobe_mode == .HARMONIC_MODE {
             config.strobe_intervals_index += 1
             if config.strobe_intervals_index >= len(interval_options) do config.strobe_intervals_index = 0

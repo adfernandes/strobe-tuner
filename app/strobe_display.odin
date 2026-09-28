@@ -47,6 +47,8 @@ StrobeDisplay :: struct {
     phase_loc:             i32,
     phase_step_loc:        i32,
     motion_blur_loc:       i32,
+    glow_loc:              i32,
+    lamp_spread_loc:       i32,
     amp_loc:               i32,
     norm_freq_loc:         i32,
     bounding_rect_loc:     i32,
@@ -106,6 +108,8 @@ init_strobe_display :: proc(
     self.phase_loc = rl.GetShaderLocation(self.strobe_shader, "phase")
     self.phase_step_loc = rl.GetShaderLocation(self.strobe_shader, "phase_step")
     self.motion_blur_loc = rl.GetShaderLocation(self.strobe_shader, "motion_blur")
+    self.glow_loc = rl.GetShaderLocation(self.strobe_shader, "glow")
+    self.lamp_spread_loc = rl.GetShaderLocation(self.strobe_shader, "lamp_spread")
     self.amp_loc = rl.GetShaderLocation(self.strobe_shader, "amp")
     self.norm_freq_loc = rl.GetShaderLocation(self.strobe_shader, "norm_freq")
     self.bounding_rect_loc = rl.GetShaderLocation(self.strobe_shader, "bounding_rect")
@@ -203,6 +207,18 @@ draw_strobe_display :: proc(
         self.motion_blur_loc,
         &motion_blur,
         rl.ShaderUniformDataType.INT,
+    )
+
+    glow := i32(config.strobe_glow)
+    rl.SetShaderValue(self.strobe_shader, self.glow_loc, &glow, rl.ShaderUniformDataType.INT)
+
+    // The wheel is lit evenly all around, the tracks only show the top of the disc
+    lamp_spread: f32 = 1000.0 if self.display_type == .SPINNING_WHEEL else 0.45
+    rl.SetShaderValue(
+        self.strobe_shader,
+        self.lamp_spread_loc,
+        &lamp_spread,
+        rl.ShaderUniformDataType.FLOAT,
     )
 
     n_color_a := rl.ColorNormalize(self.colors.x)

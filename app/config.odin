@@ -99,6 +99,8 @@ Config :: struct {
     strobe_blur:                  bool,
     // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
     motion_blur:                  bool,
+    // lamp-lit look of the old mechanical strobe tuners
+    strobe_glow:                  bool,
     prevent_strobe_octave_jumps:  bool,
 
     tuning_preset:                TuningPreset,
@@ -150,6 +152,7 @@ config_defaults :: Config {
     strobe_colorway              = .VIBRANT_RED,
     strobe_blur                  = true,
     motion_blur                  = true,
+    strobe_glow                  = true,
     prevent_strobe_octave_jumps  = true,
 
     // Custom colors

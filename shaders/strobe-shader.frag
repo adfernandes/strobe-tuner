@@ -36,6 +36,8 @@ uniform float time_stretch;
 uniform float phase;
 uniform float phase_step; // change of phase since the previous frame
 uniform int motion_blur;
+uniform int glow;
+uniform float lamp_spread; // angular width of the lamp hotspot in radians
 uniform float amp;
 uniform float norm_freq;
 uniform float band_height;
@@ -180,6 +182,51 @@ void main()
 
     // Blend colors
     vec3 rgb = mix(color_a, color_b, signal_value);
+    float alpha = curved_track;
+
+    if (glow > 0) {
+        // Emulate a lamp shining through a strobe disc, like the old Conn Strobotuners
+
+        // Stripes drawn in color_a are the lit ones
+        float lit = 1.0 - signal_value;
+
+        // Light scattering into the dark stripes, a soft copy of the pattern (just the fundamental)
+        float scatter = 1.0 - generate_blurred_signal(
+            norm_freq,
+            phase,
+            motion_blur > 0 ? phase_step : 0.0,
+            1.0,
+            time,
+            time_stretch,
+            period_count,
+            true
+        );
+
+        // Lamp hotspot, brightest around the top centre of the arcs and the middle bands
+        float radial_position = length(distance);
+        float radial_t = (radial_position - min_radius) / max(max_radius - min_radius, 1.0);
+        float angle_offset = (angle - 0.25 * TAU) / lamp_spread;
+        float hotspot = exp(-angle_offset * angle_offset - 1.5 * (radial_t - 0.45) * (radial_t - 0.45));
+
+        float emission = clamp(lit + 0.15 * scatter, 0.0, 1.0) * mix(0.7, 1.0, hotspot);
+
+        // Incandescent lamp, warms the lit stripes towards amber rather than burning them white
+        vec3 lamp = vec3(1.0, 0.62, 0.28);
+        vec3 warm = mix(color_a, lamp, 0.45 * mix(0.6, 1.0, hotspot));
+
+        // Dark stripes still glow faintly
+        rgb = mix(color_b * 0.7, warm, emission);
+        rgb *= mix(0.85, 1.1, hotspot);
+        rgb = min(rgb, vec3(1.0));
+
+        // Halo spilling a few pixels past the track edges into the gaps
+        float inner_radius = curvature_radius - thickness;
+        float outside = max(radial_position - curvature_radius, inner_radius - radial_position);
+        float halo = exp(-max(outside, 0.0) / 3.0) * step(0.0, outside) * step(outside, 8.0);
+        halo *= 0.25 * emission;
+        alpha = max(alpha, halo);
+        rgb = mix(rgb, warm, clamp(halo * (1.0 - curved_track), 0.0, 1.0));
+    }
 
 
     // Circular gradient from center to the outer edge
@@ -191,5 +238,5 @@ void main()
     // float gradient_position = 1.2 * (radial_position - min_radius) / (max_radius - min_radius);
     // vec3 rgb = mix(color_b / 255.0, color_a / 255.0, gradient_position);
 
-    finalColor = vec4(rgb, curved_track);
+    finalColor = vec4(rgb, alpha);
 }
