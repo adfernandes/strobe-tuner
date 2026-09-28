@@ -24,7 +24,6 @@ import "core:path/filepath"
 import "core:sort"
 import "core:strings"
 
-import rl "vendor:raylib"
 
 import "../core"
 
@@ -44,7 +43,7 @@ INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
 // Add gui controls to choose strobe colors
 COLOR_CONTROLS :: false
 
-run_raylib_app :: proc(config: ^Config) {
+run_app :: proc(config: ^Config) {
     target_freq_hz: f32 = config.target_freq_hz
 
     freq_estimation_active := false
@@ -71,11 +70,8 @@ run_raylib_app :: proc(config: ^Config) {
     // Save target note to config when exiting the app
     defer config.target_freq_hz = target_note.frequency
 
-    rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
-    rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(1200 when ODIN_DEBUG else STROBE_WIDTH, 800 if COLOR_CONTROLS else 532, APP_NAME)
-    rl.SetTargetFPS(120)
-    defer rl.CloseWindow()
+    if !gfx_init(1200 when ODIN_DEBUG else STROBE_WIDTH, 800 if COLOR_CONTROLS else 532, APP_NAME) do return
+    defer gfx_shutdown()
 
     init_fonts()
     defer destroy_fonts()
@@ -161,8 +157,8 @@ run_raylib_app :: proc(config: ^Config) {
 
     strobe_speed_slider_value := config.strobe_speed
     tuning_preset_choice := int(config.tuning_preset)
-    color1 := rl.GetColor(config.strobe_color_1)
-    color2 := rl.GetColor(config.strobe_color_2)
+    color1 := hex(config.strobe_color_1)
+    color2 := hex(config.strobe_color_2)
 
     interval_options := INTERVAL_OPTIONS
     config_changed := false
@@ -176,22 +172,22 @@ run_raylib_app :: proc(config: ^Config) {
     // ------------------------------------------------
 
 
-    for !rl.WindowShouldClose() {
+    for !gfx_should_close() {
 
-        if rl.IsKeyPressed(.R) {
+        if key_pressed(.R) {
             config_changed = true
             fmt.println("Reset config to defaults")
             config^ = get_config_defaults()
         }
 
-        if rl.IsKeyPressed(.X) {
+        if key_pressed(.X) {
             config.use_phase_average = !config.use_phase_average
         }
 
-        super_key_down := rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER)
-        pref_key_combo := super_key_down && rl.IsKeyPressed(.COMMA)
+        super_key_down := key_down(.LEFT_SUPER) || key_down(.RIGHT_SUPER)
+        pref_key_combo := super_key_down && key_pressed(.COMMA)
         if pref_key_combo {
-            shift_key_down := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+            shift_key_down := key_down(.LEFT_SHIFT) || key_down(.RIGHT_SHIFT)
 
             // [Cmd + Shift + ,] - Reload config
             if shift_key_down {
@@ -284,21 +280,21 @@ run_raylib_app :: proc(config: ^Config) {
             prev_target_note := target_note
 
             if config.tuning_preset == .CHROMATIC {
-                if rl.IsKeyPressed(.UP) {
+                if key_pressed(.UP) {
                     target_note = core.octave_up(target_note)
-                } else if rl.IsKeyPressed(.DOWN) {
+                } else if key_pressed(.DOWN) {
                     target_note = core.octave_down(target_note)
-                } else if rl.IsKeyPressed(.LEFT) {
+                } else if key_pressed(.LEFT) {
                     target_note = core.prev_chromatic_note(target_note)
-                } else if rl.IsKeyPressed(.RIGHT) {
+                } else if key_pressed(.RIGHT) {
                     target_note = core.next_chromatic_note(target_note)
                 }
             } else {
                 is_pressed := false
-                if rl.IsKeyPressed(.LEFT) {
+                if key_pressed(.LEFT) {
                     selected_note_idx -= 1
                     is_pressed = true
-                } else if rl.IsKeyPressed(.RIGHT) {
+                } else if key_pressed(.RIGHT) {
                     selected_note_idx += 1
                     is_pressed = true
                 }
@@ -331,7 +327,7 @@ run_raylib_app :: proc(config: ^Config) {
         core.run_phase_detection(phase_comparator, config.use_phase_average)
 
 
-        if rl.IsKeyPressed(.TAB) {
+        if key_pressed(.TAB) {
             if config.strobe_display_type == .CURVED_TRACKS {
                 config.strobe_display_type = .SPINNING_WHEEL
             } else {
@@ -339,12 +335,12 @@ run_raylib_app :: proc(config: ^Config) {
             }
         }
 
-        if rl.IsKeyPressed(.G) {
+        if key_pressed(.G) {
             // Cycle through the glow presets, OFF is first so wrap around to the start
             config.strobe_glow = GlowPreset((int(config.strobe_glow) + 1) % len(GlowPreset))
         }
 
-        if rl.IsKeyPressed(.I) && config.strobe_mode == .HARMONIC_MODE {
+        if key_pressed(.I) && config.strobe_mode == .HARMONIC_MODE {
             config.strobe_intervals_index += 1
             if config.strobe_intervals_index >= len(interval_options) do config.strobe_intervals_index = 0
             config.strobe_intervals = interval_options[config.strobe_intervals_index]
@@ -360,10 +356,9 @@ run_raylib_app :: proc(config: ^Config) {
         }
 
         // Draw the GUI controls
-        rl.BeginDrawing()
-        defer rl.EndDrawing()
+        gfx_begin_frame(hex(window_bg_color))
+        defer gfx_end_frame()
         {
-            rl.ClearBackground(rl.GetColor(window_bg_color))
 
             // TODO
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
@@ -373,8 +368,8 @@ run_raylib_app :: proc(config: ^Config) {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
 
-                if note_low_state do rl.DrawTextEx(font_store.medium_32, "◀", {10, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
-                else if note_high_state do rl.DrawTextEx(font_store.medium_32, "▶︎", {466, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
+                if note_low_state do draw_text(font_store.medium_32, "◀", {10, 10}, 16, 0, hex(0x82E2FFFF))
+                else if note_high_state do draw_text(font_store.medium_32, "▶︎", {466, 10}, 16, 0, hex(0x82E2FFFF))
             }
 
 
@@ -425,7 +420,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.note_detection_mode,
             )
 
-            if !note_detection_mode_changed && rl.IsKeyPressed(.SPACE) {
+            if !note_detection_mode_changed && key_pressed(.SPACE) {
                 note_detection_mode = .MANUAL if note_detection_mode == .AUTO else .AUTO
                 note_detection_mode_changed = true
             }
@@ -462,14 +457,7 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             // microphone icon
-            rl.DrawTexturePro(
-                texture_atlas,
-                rl.Rectangle{96, 192, 32, 32},
-                rl.Rectangle{20, 500, 16, 16},
-                rl.Vector2{0, 0},
-                0,
-                rl.WHITE,
-            )
+            draw_texture(texture_atlas, {96, 192, 32, 32}, {20, 500, 16, 16})
 
             if config.note_detection_mode != .AUTO {
                 tuning_preset_dropdown_active = gui_dropdown(
@@ -485,27 +473,27 @@ run_raylib_app :: proc(config: ^Config) {
             gui_feedback_button({461, 504})
 
 
-            if COLOR_CONTROLS {
-                rl.GuiColorPicker({20, 500, 200, 200}, nil, &color1)
-                config.strobe_color_1 = rl.ColorToInt(color1)
-                rl.DrawTextEx(
+            when COLOR_CONTROLS {
+                color_picker({20, 500, 200, 200}, &color1)
+                config.strobe_color_1 = to_hex(color1)
+                draw_text(
                     font_store.medium_32,
                     fmt.ctprintf("%x", config.strobe_color_1),
                     {20, 480},
                     16,
                     0,
-                    rl.LIGHTGRAY,
+                    LIGHTGRAY,
                 )
 
-                rl.GuiColorPicker({300, 500, 200, 200}, nil, &color2)
-                config.strobe_color_2 = rl.ColorToInt(color2)
-                rl.DrawTextEx(
+                color_picker({300, 500, 200, 200}, &color2)
+                config.strobe_color_2 = to_hex(color2)
+                draw_text(
                     font_store.medium_32,
                     fmt.ctprintf("%x", config.strobe_color_2),
                     {300, 480},
                     16,
                     0,
-                    rl.LIGHTGRAY,
+                    LIGHTGRAY,
                 )
 
                 set_strobe_colors(&strobe_display, {config.strobe_color_1, config.strobe_color_2})
@@ -514,107 +502,107 @@ run_raylib_app :: proc(config: ^Config) {
 
             // Draw input level
             {
-                rl.DrawRectangleV({264, 507}, {60, 3}, rl.GetColor(strobe_bg_color))
-                rl.DrawRectangleV(
+                draw_rect({264, 507}, {60, 3}, hex(strobe_bg_color))
+                draw_rect(
                     {264, 507},
                     {60 + clamp(pitch_info.rms_dbfs, -60, 0), 3},
-                    rl.GetColor(0x82E2FFFF),
+                    hex(0x82E2FFFF),
                 )
 
                 when ODIN_DEBUG {
                     floor_level := core.dbfs(pitch_info.noise_floor)
-                    rl.DrawRectangleV({264, 511}, {60, 3}, rl.GetColor(strobe_bg_color))
-                    rl.DrawRectangleV({264, 511}, {60 + floor_level, 3}, rl.PURPLE)
+                    draw_rect({264, 511}, {60, 3}, hex(strobe_bg_color))
+                    draw_rect({264, 511}, {60 + floor_level, 3}, PURPLE)
 
-                    rl.DrawTextEx(
+                    draw_text(
                         font_store.medium_24,
                         fmt.ctprintf("RMS %.1f", pitch_info.rms_dbfs),
                         {380, 400},
                         12,
                         0,
-                        rl.GetColor(0xFBFBFBFF),
+                        hex(0xFBFBFBFF),
                     )
 
-                    rl.DrawTextEx(
+                    draw_text(
                         font_store.medium_24,
                         fmt.ctprintf("NF %.1f", floor_level),
                         {380, 415},
                         12,
                         0,
-                        rl.GetColor(0xFBFBFBFF),
+                        hex(0xFBFBFBFF),
                     )
 
-                    rl.DrawTextEx(
+                    draw_text(
                         font_store.medium_24,
                         fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
                         {380, 430},
                         12,
                         0,
-                        rl.GetColor(0xFBFBFBFF),
+                        hex(0xFBFBFBFF),
                     )
                 }
             }
 
             when ODIN_DEBUG {
 
-                rl.DrawTextEx(
+                draw_text(
                     font_store.medium_24,
                     fmt.ctprintf("Band SNR %.1f", phase_comparator.bands[0].snr_db),
                     {250, 400},
                     12,
                     0,
-                    rl.GetColor(0xFBFBFBFF),
+                    hex(0xFBFBFBFF),
                 )
 
-                rl.DrawTextEx(
+                draw_text(
                     font_store.medium_24,
                     fmt.ctprintf("Band NF %.1f", core.dbfs(phase_comparator.bands[0].noise_floor)),
                     {250, 415},
                     12,
                     0,
-                    rl.GetColor(0xFBFBFBFF),
+                    hex(0xFBFBFBFF),
                 )
 
 
-                rl.DrawTextEx(
+                draw_text(
                     font_store.medium_32,
                     fmt.ctprintf("Clarity %.3f", pitch_info.clarity),
                     {500, 10},
                     16,
                     0,
-                    rl.GetColor(0xFBFBFBFF),
+                    hex(0xFBFBFBFF),
                 )
                 if pitch_info.is_strong_pitch {
-                    rl.DrawTextEx(
+                    draw_text(
                         font_store.medium_32,
                         fmt.ctprintf("strong"),
                         {600, 10},
                         16,
                         0,
-                        rl.ORANGE,
+                        ORANGE,
                     )
 
                 }
                 if pitch_info.is_weak_pitch {
-                    rl.DrawTextEx(
+                    draw_text(
                         font_store.medium_32,
                         fmt.ctprintf("weak"),
                         {600, 10},
                         16,
                         0,
-                        rl.PURPLE,
+                        PURPLE,
                     )
                 }
 
                 draw_nsdf(
-                    rl.Rectangle{520, 40, 660, 200},
+                    Rect{520, 40, 660, 200},
                     &pitch_detector.nsdf,
                     pitch_info.nsdf_peak,
                     font_store.medium_24,
                 )
 
                 draw_freq_plot(
-                    rl.Rectangle{520, 300, 660, 200},
+                    Rect{520, 300, 660, 200},
                     &pitch_detector.nsdf,
                     font_store.medium_24,
                 )

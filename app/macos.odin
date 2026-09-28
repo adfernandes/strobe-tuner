@@ -22,12 +22,11 @@ import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import NS "core:sys/darwin/Foundation"
-import rl "vendor:raylib"
 
 // https://github.com/odin-lang/examples/blob/master/metal/learn_metal/02-argbuffers-no-sdl/02-argbuffers-no-sdl.odin
 
 theme_mac_titlebar :: proc(window: rawptr, color: u32) {
-    bg := rl.ColorNormalize(rl.GetColor(color))
+    bg := normalize_color(hex(color))
     window := cast(^NS.Window)window
     window->setBackgroundColor(
         NS.Color.colorWithSRGBRed(

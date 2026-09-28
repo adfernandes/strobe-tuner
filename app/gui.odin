@@ -21,12 +21,11 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 
-import rl "vendor:raylib"
 
 import "../core"
 
 
-texture_atlas: rl.Texture2D
+texture_atlas: Texture
 
 // position can serve as an ID for slider controls
 active_slider_position: [2]f32 = {}
@@ -34,19 +33,16 @@ active_slider_position: [2]f32 = {}
 // an active dropdown menu or slider dragging should not trigger other GUI controls
 exclusive_control_mode := false
 
-text_color_dark := rl.GetColor(0x15141BFF)
-text_color_light := rl.GetColor(0xBDBDBDFF)
+text_color_dark := hex(0x15141BFF)
+text_color_light := hex(0xBDBDBDFF)
 
 
 load_texture_atlas :: proc() {
-    file_data := #load("../assets/images/atlas.2x.png")
-    image := rl.LoadImageFromMemory(".png", raw_data(file_data), i32(len(file_data)))
-    texture_atlas = rl.LoadTextureFromImage(image)
-    rl.UnloadImage(image)
+    texture_atlas = gfx_load_texture(#load("../assets/images/atlas.2x.png"))
 }
 
 unload_texture_atlas :: proc() {
-    rl.UnloadTexture(texture_atlas)
+    gfx_unload_texture(texture_atlas)
 }
 
 gui_strobe_mode_toggle :: proc(
@@ -56,31 +52,24 @@ gui_strobe_mode_toggle :: proc(
     core.StrobeMode,
     bool,
 ) {
-    tex_src: rl.Rectangle
+    tex_src: Rect
     label: cstring
-    label_pos: rl.Vector2
+    label_pos: [2]f32
 
     if active_strobe_mode == .HARMONIC_MODE {
-        tex_src = rl.Rectangle{0, 96, 240, 48}
+        tex_src = Rect{0, 96, 240, 48}
         label = "HARMONIC"
-        label_pos = rl.Vector2{position.x + 27.0, position.y + 5}
+        label_pos = [2]f32{position.x + 27.0, position.y + 5}
     } else {
-        tex_src = rl.Rectangle{0, 0, 240, 48}
+        tex_src = Rect{0, 0, 240, 48}
         label = "VERNIER"
-        label_pos = rl.Vector2{position.x + 32.0, position.y + 5}
+        label_pos = [2]f32{position.x + 32.0, position.y + 5}
     }
 
     // rounded button texture
-    rl.DrawTexturePro(
-        texture_atlas,
-        tex_src,
-        rl.Rectangle{position.x, position.y, 120, 24},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
+    draw_texture(texture_atlas, tex_src, Rect{position.x, position.y, 120, 24})
 
-    rl.DrawTextEx(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
+    draw_text(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
 
     if gui_button({position.x, position.y, 120, 24}) {
         if active_strobe_mode == .HARMONIC_MODE do return .VERNIER_MODE, true
@@ -93,14 +82,7 @@ gui_strobe_mode_toggle :: proc(
 
 gui_feedback_button :: proc(position: [2]f32) {
     // bug icon texture
-    rl.DrawTexturePro(
-        texture_atlas,
-        rl.Rectangle{64, 192, 32, 32},
-        rl.Rectangle{position.x, position.y, 16, 16},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
+    draw_texture(texture_atlas, Rect{64, 192, 32, 32}, Rect{position.x, position.y, 16, 16})
 
     if gui_button({position.x, position.y, 16, 16}) {
         when ODIN_OS == .Darwin {
@@ -125,7 +107,7 @@ gui_strobe_partial :: proc(
 ) {
 
     text: cstring
-    text_size: rl.Vector2
+    text_size: [2]f32
     font := font_store.medium_32
     font_size: f32 = 16
 
@@ -144,10 +126,10 @@ gui_strobe_partial :: proc(
         text = fmt.ctprintf("%v×", band.interval)
     }
 
-    text_size = rl.MeasureTextEx(font, text, font_size, 0)
-    bounds: rl.Rectangle = {position.x - text_size.x, position.y, text_size.x, text_size.y}
+    text_size = measure_text(font, text, font_size, 0)
+    bounds: Rect = {position.x - text_size.x, position.y, text_size.x, text_size.y}
 
-    rl.DrawTextEx(font, text, {bounds.x, bounds.y}, font_size, 0, rl.GetColor(0x82E2FFFF))
+    draw_text(font, text, {bounds.x, bounds.y}, font_size, 0, hex(0x82E2FFFF))
 
     if gui_button(bounds) {
         if type == .MULTIPLES do return .FREQUENCY, true
@@ -165,30 +147,23 @@ gui_note_detection_mode_toggle :: proc(
     NoteDetectionMode,
     bool,
 ) {
-    tex_src: rl.Rectangle
+    tex_src: Rect
     label: cstring
-    label_pos: rl.Vector2
+    label_pos: [2]f32
 
     if active_detection_mode == .AUTO {
-        tex_src = rl.Rectangle{0, 48, 240, 48}
+        tex_src = Rect{0, 48, 240, 48}
         label = "AUTO"
-        label_pos = rl.Vector2{position.x + 42.0, position.y + 5}
+        label_pos = [2]f32{position.x + 42.0, position.y + 5}
     } else {
-        tex_src = rl.Rectangle{0, 0, 240, 48}
+        tex_src = Rect{0, 0, 240, 48}
         label = "MANUAL"
-        label_pos = rl.Vector2{position.x + 34.0, position.y + 5}
+        label_pos = [2]f32{position.x + 34.0, position.y + 5}
     }
 
     // rounded button texture
-    rl.DrawTexturePro(
-        texture_atlas,
-        tex_src,
-        rl.Rectangle{position.x, position.y, 120, 24},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
-    rl.DrawTextEx(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
+    draw_texture(texture_atlas, tex_src, Rect{position.x, position.y, 120, 24})
+    draw_text(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
 
     if gui_button({position.x, position.y, 120, 24}) {
         if active_detection_mode == .AUTO do return .MANUAL, true
@@ -202,18 +177,11 @@ gui_note_detection_mode_toggle :: proc(
 gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
     gui_slider(position, value, 0.001, 0.05)
     // Draw the crosshair icon
-    rl.DrawTexturePro(
-        texture_atlas,
-        rl.Rectangle{32, 192, 32, 32},
-        rl.Rectangle{position.x + 6, position.y + 4, 16, 16},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
-    rl.DrawTextEx(
+    draw_texture(texture_atlas, Rect{32, 192, 32, 32}, Rect{position.x + 6, position.y + 4, 16, 16})
+    draw_text(
         font_store.medium_28,
         "SENSITIVITY", // speed ?
-        rl.Vector2{position.x + 32.0, position.y + 5},
+        [2]f32{position.x + 32.0, position.y + 5},
         14,
         1,
         text_color_dark,
@@ -226,34 +194,34 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
     value^ = clamp(value^, min, max)
     fraction := (value^ - min) / (max - min)
 
-    mouse_point := rl.GetMousePosition()
+    mouse_point := mouse_position()
 
     width: f32 = 146
     height: f32 = 24
 
-    bounds := rl.Rectangle{position.x, position.y, width, height}
+    bounds := Rect{position.x, position.y, width, height}
 
     // use position to determine if this is the active slider
     is_active := active_slider_position.x == position.x && active_slider_position.y == position.y
 
     if exclusive_control_mode && is_active {
         // still dragging
-        if rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+        if mouse_down() {
             fraction = clamp(mouse_point.x - position.x, 0, width) / width
             value^ = math.lerp(min, max, fraction)
         } else {
             exclusive_control_mode = false
             active_slider_position = {}
         }
-    } else if rl.CheckCollisionPointRec(mouse_point, bounds) {
+    } else if point_in_rect(mouse_point, bounds) {
         // start drag
-        if !exclusive_control_mode && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+        if !exclusive_control_mode && mouse_down() {
             exclusive_control_mode = true
             active_slider_position = position
             fraction = clamp(mouse_point.x - position.x, 0, width) / width
             value^ = math.lerp(min, max, fraction)
         } else {
-            wheel := rl.GetMouseWheelMove()
+            wheel := mouse_wheel()
             if wheel != 0 {
                 fraction = clamp(fraction - wheel * 0.05, 0, 1)
                 value^ = math.lerp(min, max, fraction)
@@ -264,29 +232,15 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
     slider_position: f32 = fraction * width
 
     // Draw the slider background
-    rl.DrawTexturePro(
-        texture_atlas,
-        rl.Rectangle{240, 48, width * 2, height * 2},
-        rl.Rectangle{position.x, position.y, width, height},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
+    draw_texture(texture_atlas, Rect{240, 48, width * 2, height * 2}, Rect{position.x, position.y, width, height})
     // Draw the filled (highlighted) area
-    rl.DrawTexturePro(
-        texture_atlas,
-        rl.Rectangle{240, 96, slider_position * 2, height * 2},
-        rl.Rectangle{position.x, position.y, slider_position, height},
-        rl.Vector2{0, 0},
-        0,
-        rl.WHITE,
-    )
+    draw_texture(texture_atlas, Rect{240, 96, slider_position * 2, height * 2}, Rect{position.x, position.y, slider_position, height})
 }
 
-gui_button :: proc(bounds: rl.Rectangle) -> bool {
-    mouse_point := rl.GetMousePosition()
-    if rl.CheckCollisionPointRec(mouse_point, bounds) && !exclusive_control_mode {
-        if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+gui_button :: proc(bounds: Rect) -> bool {
+    mouse_point := mouse_position()
+    if point_in_rect(mouse_point, bounds) && !exclusive_control_mode {
+        if mouse_pressed() {
             return true
         }
     }
@@ -308,7 +262,7 @@ gui_dropdown :: proc(
     left_pad: f32 = 12,
 ) -> bool {
     edit_mode := edit_mode
-    btn_bounds := rl.Rectangle{position.x, position.y, width, 24}
+    btn_bounds := Rect{position.x, position.y, width, 24}
 
     // TODO: make it either a prop or depend on actual width
     max_text_len := 25
@@ -316,37 +270,16 @@ gui_dropdown :: proc(
     // Draw the button
     {
         // Draw the left part of the dropdown button
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 144, width * 2, 48},
-            rl.Rectangle{position.x, position.y, width - 16, 24},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
+        draw_texture(texture_atlas, Rect{0, 144, width * 2, 48}, Rect{position.x, position.y, width - 16, 24})
         // Draw the rounded cap on the right side
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 144, -32, 48},
-            rl.Rectangle{position.x + width - 16, position.y, 16, 24},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
+        draw_texture(texture_atlas, Rect{0, 144, -32, 48}, Rect{position.x + width - 16, position.y, 16, 24})
         // Draw the triangle icon
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{128, 192, 32, 32},
-            rl.Rectangle{position.x + width - 20, position.y + 4, 16, 16},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
+        draw_texture(texture_atlas, Rect{128, 192, 32, 32}, Rect{position.x + width - 20, position.y + 4, 16, 16})
     }
 
     if selected_idx != nil {
         label := strings.cut(options[selected_idx^].label, 0, max_text_len)
-        rl.DrawTextEx(
+        draw_text(
             font_store.medium_28,
             fmt.ctprintf("%s", label),
             {position.x + left_pad, position.y + 5},
@@ -358,19 +291,19 @@ gui_dropdown :: proc(
 
     // menu height without the top & bottom caps
     menu_height := f32(len(options) * 24)
-    menu_bounds := rl.Rectangle{position.x, position.y - menu_height - 30, width, menu_height + 30}
+    menu_bounds := Rect{position.x, position.y - menu_height - 30, width, menu_height + 30}
 
-    mouse_point := rl.GetMousePosition()
+    mouse_point := mouse_position()
 
-    if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+    if mouse_pressed() {
         if edit_mode {
             // clicked outside
-            if !rl.CheckCollisionPointRec(mouse_point, menu_bounds) {
+            if !point_in_rect(mouse_point, menu_bounds) {
                 edit_mode = false
                 exclusive_control_mode = false
             }
         } else {
-            if !exclusive_control_mode && rl.CheckCollisionPointRec(mouse_point, btn_bounds) {
+            if !exclusive_control_mode && point_in_rect(mouse_point, btn_bounds) {
                 edit_mode = true
                 exclusive_control_mode = true
             }
@@ -379,54 +312,26 @@ gui_dropdown :: proc(
 
     // Draw the dropdown menu
     if edit_mode {
-        menu_position := rl.Vector2{position.x, position.y - menu_height - 30}
+        menu_position := [2]f32{position.x, position.y - menu_height - 30}
 
         // Top cap
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 144, width * 2, 24},
-            rl.Rectangle{menu_position.x, menu_position.y, width - 16, 12},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 144, -32, 24},
-            rl.Rectangle{position.x + width - 16, menu_position.y, 16, 12},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
+        draw_texture(texture_atlas, Rect{0, 144, width * 2, 24}, Rect{menu_position.x, menu_position.y, width - 16, 12})
+        draw_texture(texture_atlas, Rect{0, 144, -32, 24}, Rect{position.x + width - 16, menu_position.y, 16, 12})
 
-        rl.DrawRectangleV(
+        draw_rect(
             {menu_position.x, menu_position.y + 12},
             {width, menu_height},
-            rl.GetColor(0x2D2E35FF),
+            hex(0x2D2E35FF),
         )
 
         // Bottom cap
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 144, width * 2, -24},
-            rl.Rectangle{menu_position.x, menu_position.y + 12 + menu_height, width - 16, 12},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 144, -32, -24},
-            rl.Rectangle{menu_position.x + width - 16, menu_position.y + 12 + menu_height, 16, 12},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
+        draw_texture(texture_atlas, Rect{0, 144, width * 2, -24}, Rect{menu_position.x, menu_position.y + 12 + menu_height, width - 16, 12})
+        draw_texture(texture_atlas, Rect{0, 144, -32, -24}, Rect{menu_position.x + width - 16, menu_position.y + 12 + menu_height, 16, 12})
         // debug
-        // rl.DrawRectangleLinesEx(menu_bounds, 1.0, rl.ORANGE)
+        // draw_rect_lines(menu_bounds, 1.0, ORANGE)
 
         for opt, i in options {
-            option_bounds := rl.Rectangle {
+            option_bounds := Rect {
                 menu_position.x,
                 menu_position.y + 12 + f32(i * 24),
                 width,
@@ -435,9 +340,9 @@ gui_dropdown :: proc(
 
             hover := false
 
-            if edit_mode && rl.CheckCollisionPointRec(mouse_point, option_bounds) {
+            if edit_mode && point_in_rect(mouse_point, option_bounds) {
                 hover = true
-                if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+                if mouse_pressed() {
                     edit_mode = false
                     exclusive_control_mode = false
                     selected_idx^ = i
@@ -445,22 +350,22 @@ gui_dropdown :: proc(
             }
 
             if hover {
-                rl.DrawRectangleV(
+                draw_rect(
                     {option_bounds.x, option_bounds.y},
                     {option_bounds.width, option_bounds.height},
-                    rl.GetColor(0x15141BFF),
+                    hex(0x15141BFF),
                 )
             }
 
-            text_pos := rl.Vector2{option_bounds.x + 12, option_bounds.y + 4}
+            text_pos := [2]f32{option_bounds.x + 12, option_bounds.y + 4}
             label := strings.cut(opt.label, 0, max_text_len)
-            rl.DrawTextEx(
+            draw_text(
                 font_store.medium_28,
                 fmt.ctprintf("%s", label),
                 text_pos,
                 14,
                 1,
-                rl.GetColor(0xFFFFFFFF) if hover else text_color_light,
+                hex(0xFFFFFFFF) if hover else text_color_light,
             )
         }
     }
@@ -472,21 +377,21 @@ gui_dropdown :: proc(
 draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     if note.frequency == 0 do return
 
-    light_color := rl.GetColor(0xFBFBFBFF)
-    muted_color := rl.GetColor(0x7D7E8FFF)
+    light_color := hex(0xFBFBFBFF)
+    muted_color := hex(0x7D7E8FFF)
 
     color := light_color if freq_estimation_active else muted_color
 
     // Note name
-    rl.DrawTextEx(font_store.medium_256, fmt.ctprintf("%v", note.name), pos, 128, 0, color)
+    draw_text(font_store.medium_256, fmt.ctprintf("%v", note.name), pos, 128, 0, color)
 
     // Sharp sign
     if note.is_accidental {
-        rl.DrawTextEx(font_store.noto_medium_96, "♯", {pos.x + 76, pos.y + 12}, 48, 0, color)
+        draw_text(font_store.noto_medium_96, "♯", {pos.x + 76, pos.y + 12}, 48, 0, color)
     }
 
     // Octave number
-    rl.DrawTextEx(
+    draw_text(
         font_store.medium_76,
         fmt.ctprintf("%v", note.octave),
         {pos.x + 76, pos.y + 72},
@@ -517,15 +422,15 @@ draw_measurements :: proc(
     }
 
     // TODO: define a palette somewhere
-    light_color := rl.GetColor(0xFBFBFBFF)
-    muted_color := rl.GetColor(0x7D7E8FFF)
+    light_color := hex(0xFBFBFBFF)
+    muted_color := hex(0x7D7E8FFF)
 
     color := light_color if freq_estimation_active else muted_color
     font := font_store.bold_36 if freq_estimation_active else font_store.medium_32
 
-    rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, light_color)
+    draw_text(font_store.medium_32, "Hz", {147, 323}, 16, 1, light_color)
 
-    rl.DrawTextEx(
+    draw_text(
         font,
         "-" if show_placeholder else fmt.ctprintf("%.1f", hz),
         {147, 344},
@@ -534,15 +439,15 @@ draw_measurements :: proc(
         color,
     )
 
-    rl.DrawTextEx(font_store.medium_32, "Cents", {232, 323}, 16, 1, light_color)
+    draw_text(font_store.medium_32, "Cents", {232, 323}, 16, 1, light_color)
 
     cents_str := fmt.ctprintf("%.1f", math.abs(cents))
     show_minus_sign := cents < 0 && cents_str != "0.0"
 
     if show_minus_sign || show_placeholder {
-        rl.DrawTextEx(font, "-", {232, 344}, 18, 1, color)
+        draw_text(font, "-", {232, 344}, 18, 1, color)
     }
 
-    rl.DrawTextEx(font, "" if show_placeholder else cents_str, {242, 344}, 18, 1, color)
+    draw_text(font, "" if show_placeholder else cents_str, {242, 344}, 18, 1, color)
 
 }

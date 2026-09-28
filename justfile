@@ -68,8 +68,15 @@ build-portaudio-win:
 dev:
     odin run app -debug
 
+# SDL3 GPU renderer with Metal shaders (brew install sdl3)
+dev-sdl:
+    odin run app -debug -define:RENDERER=sdl
+
 build:
     odin build app -o:speed -microarch:native
+
+build-sdl:
+    odin build app -o:speed -microarch:native -define:RENDERER=sdl
 
 # Run on Win 11
 dev-win:

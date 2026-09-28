@@ -16,6 +16,8 @@
 
 #version 330
 
+// Used by the raylib renderer, the SDL renderer uses shaders/metal/bloom.metal, keep the two in sync.
+
 // Bloom passes for the strobe glow:
 //   mode 0 - downsample the strobe and keep only the bright parts (the background shouldn't glow)
 //   mode 1 - one direction of a separable gaussian blur

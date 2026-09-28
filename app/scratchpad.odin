@@ -18,10 +18,9 @@ package app
 import "../core"
 import "core:fmt"
 import "core:math"
-import rl "vendor:raylib"
 
-draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, font: rl.Font) {
-    points: [4096]rl.Vector2 = {}
+draw_nsdf :: proc(rect: Rect, nsdf: ^core.NSDFConfig, peak: core.Vec2, font: Font) {
+    points: [4096][2]f32 = {}
 
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
@@ -42,7 +41,7 @@ draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, f
     }
 
     draw_time_plot(rect, len, 1000, font)
-    rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
+    draw_line_strip(points[:len], GOLD)
 
     // Mark peak positions with a cross
     for peak, i in nsdf.nsdf_peaks {
@@ -55,77 +54,77 @@ draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, f
         if cx > rect.x + rect.width do break
 
         // Vertical ruler
-        rl.DrawLineEx({cx, cy}, {cx, rect.y + rect.height}, 0.5, rl.LIGHTGRAY)
+        draw_line({cx, cy}, {cx, rect.y + rect.height}, 0.5, LIGHTGRAY)
         ruler_label_y := rect.y + rect.height + 8
         // small vertical offset so labels don't overlap
         if i % 2 == 0 {
             ruler_label_y += 16
         }
-        rl.DrawTextEx(
+        draw_text(
             font,
             fmt.ctprintf("%.2fHz", f32(nsdf.samplerate) / peak.x),
             {cx, ruler_label_y},
             12,
             0,
-            rl.LIGHTGRAY,
+            LIGHTGRAY,
         )
 
         // X marker - cross
-        color := rl.LIGHTGRAY
+        color := LIGHTGRAY
         if nsdf.chosen_peak_idx == i {
-            color = rl.PINK
+            color = PINK
         }
-        rl.DrawLineEx({cx - 7.0, cy}, {cx + 7.0, cy}, 2.0, color)
-        rl.DrawLineEx({cx, cy - 7.0}, {cx, cy + 7.0}, 2.0, color)
+        draw_line({cx - 7.0, cy}, {cx + 7.0, cy}, 2.0, color)
+        draw_line({cx, cy - 7.0}, {cx, cy + 7.0}, 2.0, color)
     }
 }
 
 
-draw_time_plot :: proc(rect: rl.Rectangle, len_samples: int, div_samples: int, font: rl.Font) {
+draw_time_plot :: proc(rect: Rect, len_samples: int, div_samples: int, font: Font) {
     // Horizontal lines at 1,0,-1
-    rl.DrawLineEx({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, rl.LIGHTGRAY)
-    rl.DrawTextEx(font, "1", {rect.x - 16, rect.y - 8}, 12, 0, rl.LIGHTGRAY)
+    draw_line({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, LIGHTGRAY)
+    draw_text(font, "1", {rect.x - 16, rect.y - 8}, 12, 0, LIGHTGRAY)
 
-    rl.DrawLineEx(
+    draw_line(
         {rect.x, rect.y + rect.height / 2},
         {rect.x + rect.width, rect.y + rect.height / 2},
         0.5,
-        rl.LIGHTGRAY,
+        LIGHTGRAY,
     )
-    rl.DrawTextEx(font, "0", {rect.x - 16, rect.y + rect.height / 2 - 8}, 12, 0, rl.LIGHTGRAY)
+    draw_text(font, "0", {rect.x - 16, rect.y + rect.height / 2 - 8}, 12, 0, LIGHTGRAY)
 
-    rl.DrawLineEx(
+    draw_line(
         {rect.x, rect.y + rect.height},
         {rect.x + rect.width, rect.y + rect.height},
         0.5,
-        rl.LIGHTGRAY,
+        LIGHTGRAY,
     )
-    rl.DrawTextEx(font, "-1", {rect.x - 24, rect.y + rect.height - 8}, 12, 0, rl.LIGHTGRAY)
+    draw_text(font, "-1", {rect.x - 24, rect.y + rect.height - 8}, 12, 0, LIGHTGRAY)
 
     // Vertical lines every x samples
     px_per_sample := rect.width / f32(len_samples)
 
     for d := 0; d < len_samples; d += div_samples {
         px := rect.x + f32(d) * px_per_sample
-        rl.DrawLineEx({px, rect.y}, {px, rect.y + rect.height}, 0.5, rl.LIGHTGRAY)
+        draw_line({px, rect.y}, {px, rect.y + rect.height}, 0.5, LIGHTGRAY)
     }
 
-    rl.DrawLineEx(
+    draw_line(
         {rect.x + rect.width, rect.y},
         {rect.x + rect.width, rect.y + rect.height},
         0.5,
-        rl.LIGHTGRAY,
+        LIGHTGRAY,
     )
 }
 
 FreqPeak :: struct {
-    position:  rl.Vector2,
+    position:  [2]f32,
     magnitude: f32,
     frequency: f32,
 }
 
-draw_freq_plot :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, font: rl.Font) {
-    points: [256]rl.Vector2 = {}
+draw_freq_plot :: proc(rect: Rect, nsdf: ^core.NSDFConfig, font: Font) {
+    points: [256][2]f32 = {}
     peak_candidates: [256]FreqPeak = {}
     peaks: [256]FreqPeak = {}
 
@@ -135,23 +134,23 @@ draw_freq_plot :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, font: rl.Font
     x := rect.x
     gain: f32 = 1.0 / f32(nsdf.fft_size)
 
-    rl.DrawTextEx(font, "0dB", {rect.x, rect.y - 16}, 12, 0, rl.LIGHTGRAY)
-    rl.DrawTextEx(font, "-100dB", {rect.x, rect.y + rect.height + 8}, 12, 0, rl.LIGHTGRAY)
+    draw_text(font, "0dB", {rect.x, rect.y - 16}, 12, 0, LIGHTGRAY)
+    draw_text(font, "-100dB", {rect.x, rect.y + rect.height + 8}, 12, 0, LIGHTGRAY)
 
-    rl.DrawLineEx({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, rl.LIGHTGRAY)
-    rl.DrawLineEx(
+    draw_line({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, LIGHTGRAY)
+    draw_line(
         {rect.x, rect.y + rect.height / 2},
         {rect.x + rect.width, rect.y + rect.height / 2},
         0.5,
-        rl.LIGHTGRAY,
+        LIGHTGRAY,
     )
-    rl.DrawLineEx(
+    draw_line(
         {rect.x, rect.y + rect.height},
         {rect.x + rect.width, rect.y + rect.height},
         0.5,
-        rl.LIGHTGRAY,
+        LIGHTGRAY,
     )
-    rl.DrawLineEx({rect.x, rect.y}, {rect.x, rect.y + rect.height}, 0.5, rl.LIGHTGRAY)
+    draw_line({rect.x, rect.y}, {rect.x, rect.y + rect.height}, 0.5, LIGHTGRAY)
 
     for i in 0 ..< len(points) {
         normalized_magnitude := abs(nsdf.fft[i]) / f32(nsdf.fft_size)
@@ -205,23 +204,23 @@ draw_freq_plot :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, font: rl.Font
     }
     found := k
 
-    rl.DrawLineStrip(raw_data(points[:]), i32(len(points)), rl.PINK)
+    draw_line_strip(points[:], PINK)
 
     for i in 0 ..< found {
-        rl.DrawLineEx(
+        draw_line(
             {peaks[i].position.x, peaks[i].position.y},
             {peaks[i].position.x, rect.y + rect.height},
             0.5,
-            rl.LIGHTGRAY,
+            LIGHTGRAY,
         )
-        rl.DrawCircleV({peaks[i].position.x, peaks[i].position.y}, 3.0, rl.GOLD)
-        rl.DrawTextEx(
+        draw_circle({peaks[i].position.x, peaks[i].position.y}, 3.0, GOLD)
+        draw_text(
             font,
             fmt.ctprintf("%.1fHz", peaks[i].frequency),
             {peaks[i].position.x, peaks[i].position.y - 20},
             12,
             0,
-            rl.GOLD,
+            GOLD,
         )
     }
 }
