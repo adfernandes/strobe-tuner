@@ -31,6 +31,7 @@ import "core:math/linalg"
 //   gfx_should_close() -> bool          polls the window events, call once per frame
 //   gfx_begin_frame(clear), gfx_end_frame()
 //   gfx_frame_time() -> f32, gfx_dpi_scale() -> f32
+//   gfx_window_size() -> [2]f32, gfx_safe_area() -> Rect   in points
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
 //

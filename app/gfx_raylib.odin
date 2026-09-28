@@ -90,6 +90,16 @@ when RENDERER == "raylib" {
         return rl.GetWindowScaleDPI().x
     }
 
+    gfx_window_size :: proc() -> [2]f32 {
+        return {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
+    }
+
+    // No notches on the desktop
+    gfx_safe_area :: proc() -> Rect {
+        size := gfx_window_size()
+        return {0, 0, size.x, size.y}
+    }
+
     key_pressed :: proc(key: Key) -> bool {
         return rl.IsKeyPressed(raylib_keys[key])
     }

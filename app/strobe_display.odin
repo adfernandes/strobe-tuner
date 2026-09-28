@@ -34,9 +34,6 @@ StrobeDisplay :: struct {
     strobe_shader:   Shader,
     bloom_shader:    Shader,
     shadow_tex:      Texture,
-    texture_width:   i32,
-    texture_height:  i32,
-    position:        [2]f32,
     colors:          [2]Color,
     background:      Color,
     display_type:    StrobeDisplayType,
@@ -45,6 +42,7 @@ StrobeDisplay :: struct {
     scene_rt:        RenderTarget,
     bloom_rt:        [2]RenderTarget,
     glow_scale:      f32, // DPI scale the render targets were created for
+    glow_size:       [2]f32, // and the strobe size in points
 
     // per band stripe sharpness and visibility, smoothed so they don't flicker, see update_band_look
     band_amp:        [core.MAX_BANDS]f32,
@@ -53,17 +51,12 @@ StrobeDisplay :: struct {
 
 
 init_strobe_display :: proc(
-    position: [2]f32,
-    size: [2]i32,
     colors: [2]u32,
     background: u32,
     display_type: StrobeDisplayType,
 ) -> (
     self: StrobeDisplay,
 ) {
-    self.texture_width = i32(size.x)
-    self.texture_height = i32(size.y)
-    self.position = position
     self.colors = {hex(colors.x), hex(colors.y)}
     self.background = hex(background)
     self.display_type = display_type
@@ -98,17 +91,18 @@ unload_glow_targets :: proc(self: ^StrobeDisplay) {
 
 // (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp
 @(private)
-ensure_glow_targets :: proc(self: ^StrobeDisplay) {
+ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
     scale := gfx_dpi_scale()
-    if scale == self.glow_scale do return
+    if scale == self.glow_scale && size == self.glow_size do return
 
     unload_glow_targets(self)
 
-    self.scene_rt = gfx_load_render_target(i32(STROBE_WIDTH * scale), i32(STROBE_HEIGHT * scale))
+    self.scene_rt = gfx_load_render_target(i32(size.x * scale), i32(size.y * scale))
     for &rt in self.bloom_rt {
-        rt = gfx_load_render_target(STROBE_WIDTH / BLOOM_DOWNSCALE, STROBE_HEIGHT / BLOOM_DOWNSCALE)
+        rt = gfx_load_render_target(i32(size.x / BLOOM_DOWNSCALE), i32(size.y / BLOOM_DOWNSCALE))
     }
     self.glow_scale = scale
+    self.glow_size = size
 }
 
 // Separable gaussian blur, ping-pongs between the two targets and ends up in rts[0]
@@ -196,8 +190,12 @@ set_strobe_colors :: proc(self: ^StrobeDisplay, colors: [2]u32) {
     self.colors = {hex(colors.x), hex(colors.y)}
 }
 
+// The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
+// a taller rect only extends the background upwards (e.g. behind the notch)
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
+    rect: Rect,
+    scale: f32,
     phase_info: ^core.PhaseComparator,
     out_of_range: bool,
     config: ^Config,
@@ -219,6 +217,8 @@ draw_strobe_display :: proc(
         }
         period_count = 12.0
     }
+    curvature_radius *= scale
+    band_height *= scale
 
     glow_enabled := config.strobe_glow != .OFF
     glow_params := GLOW_PRESETS[config.strobe_glow]
@@ -243,44 +243,42 @@ draw_strobe_display :: proc(
     }
     min_radius := uniforms.min_radius
 
-    y := self.position.y
+    y := rect.y + rect.height - scale * STROBE_HEIGHT
     if self.display_type == .CURVED_TRACKS {
-        y += 32
+        y += 32 * scale
     }
-
-    strobe_rect := Rect{self.position.x, self.position.y, STROBE_WIDTH, STROBE_HEIGHT}
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings
-        ensure_glow_targets(self)
+        ensure_glow_targets(self, {rect.width, rect.height})
 
         begin_render_target(
             self.scene_rt,
             glow_background(self.background, glow_params),
-            self.position,
+            {rect.x, rect.y},
             self.glow_scale,
         )
-        draw_strobe_bands(self, phase_info, &uniforms, y, curvature_radius, band_height, period_count)
+        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count)
         end_render_target()
 
         render_bloom(self)
     }
 
-    begin_scissor({0, 0, STROBE_WIDTH, STROBE_HEIGHT})
+    begin_scissor(rect)
     defer end_scissor()
 
     if glow_enabled {
         set_blend_mode(.REPLACE)
-        draw_render_target(self.scene_rt, strobe_rect)
+        draw_render_target(self.scene_rt, rect)
 
         // Add the bloom on top, the light spills into the gaps and the dark background
         set_blend_mode(.ADD)
         strength := u8(BLOOM_STRENGTH * 255)
-        draw_render_target(self.bloom_rt[0], strobe_rect, {strength, strength, strength, 255})
+        draw_render_target(self.bloom_rt[0], rect, {strength, strength, strength, 255})
         set_blend_mode(.ALPHA)
     } else {
-        draw_rect(self.position, {f32(self.texture_width), STROBE_HEIGHT}, self.background)
-        draw_strobe_bands(self, phase_info, &uniforms, y, curvature_radius, band_height, period_count)
+        draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
+        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count)
     }
 
     // Draw labels for partials
@@ -291,7 +289,7 @@ draw_strobe_display :: proc(
 
         for &band, band_idx in phase_info.bands {
             order := len(phase_info.bands) - 1 - band_idx
-            cos: f32 = 216
+            cos := 0.5 * rect.width - 28
             r += band_height
             sin := math.sqrt(r * r - cos * cos)
 
@@ -300,7 +298,7 @@ draw_strobe_display :: proc(
                 draw_text(
                     font_store.medium_32,
                     fmt.ctprintf("%.4f", band.err_cents),
-                    {self.position.x + 16, y + band_height * (f32(order) + 0.6) + r - sin},
+                    {rect.x + 16, y + band_height * (f32(order) + 0.6) + r - sin},
                     16,
                     0,
                     hex(0x82E2FFFF),
@@ -309,7 +307,7 @@ draw_strobe_display :: proc(
 
             // Partial order, e.g. 1x, 2x, etc
             partial_labels, changed := gui_strobe_partial(
-                {self.position.x + 260 + cos, y + band_height * (f32(order) + 0.6) + r - sin},
+                {rect.x + rect.width - 12, y + band_height * (f32(order) + 0.6) + r - sin},
                 config.partial_labels,
                 band,
             )
@@ -322,7 +320,7 @@ draw_strobe_display :: proc(
     draw_texture(
         self.shadow_tex,
         {0, 0, f32(self.shadow_tex.width), f32(self.shadow_tex.height)},
-        {0, -20, STROBE_WIDTH, STROBE_HEIGHT + 22},
+        {rect.x, rect.y - 20, rect.width, rect.height + 22},
     )
 }
 
@@ -363,6 +361,7 @@ update_band_look :: proc(
 
 draw_strobe_bands :: proc(
     self: ^StrobeDisplay,
+    strobe_rect: Rect,
     phase_info: ^core.PhaseComparator,
     uniforms: ^StrobeUniforms,
     y: f32,
@@ -379,12 +378,9 @@ draw_strobe_bands :: proc(
     for &band, band_idx in phase_info.bands {
         order := len(phase_info.bands) - 1 - band_idx
 
-        rect := Rect {
-            self.position.x,
-            y + band_height * f32(order),
-            f32(self.texture_width),
-            f32(self.texture_height),
-        }
+        // Down to the bottom of the strobe, the arcs drop towards the sides
+        band_y := y + band_height * f32(order)
+        rect := Rect{strobe_rect.x, band_y, strobe_rect.width, strobe_rect.y + strobe_rect.height - band_y}
 
         uniforms.bounding_rect = {rect.x, rect.y, rect.width, rect.height}
 

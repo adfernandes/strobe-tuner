@@ -401,7 +401,9 @@ draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     )
 }
 
+// pos is the top left of the Hz label
 draw_measurements :: proc(
+    pos: [2]f32,
     pitch: core.PitchInfo,
     last_good_pitch: core.PitchInfo,
     freq_estimation_active: bool,
@@ -428,26 +430,26 @@ draw_measurements :: proc(
     color := light_color if freq_estimation_active else muted_color
     font := font_store.bold_36 if freq_estimation_active else font_store.medium_32
 
-    draw_text(font_store.medium_32, "Hz", {147, 323}, 16, 1, light_color)
+    draw_text(font_store.medium_32, "Hz", pos, 16, 1, light_color)
 
     draw_text(
         font,
         "-" if show_placeholder else fmt.ctprintf("%.1f", hz),
-        {147, 344},
+        pos + {0, 21},
         18,
         1,
         color,
     )
 
-    draw_text(font_store.medium_32, "Cents", {232, 323}, 16, 1, light_color)
+    draw_text(font_store.medium_32, "Cents", pos + {85, 0}, 16, 1, light_color)
 
     cents_str := fmt.ctprintf("%.1f", math.abs(cents))
     show_minus_sign := cents < 0 && cents_str != "0.0"
 
     if show_minus_sign || show_placeholder {
-        draw_text(font, "-", {232, 344}, 18, 1, color)
+        draw_text(font, "-", pos + {85, 21}, 18, 1, color)
     }
 
-    draw_text(font, "" if show_placeholder else cents_str, {242, 344}, 18, 1, color)
+    draw_text(font, "" if show_placeholder else cents_str, pos + {95, 21}, 18, 1, color)
 
 }

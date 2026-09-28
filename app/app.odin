@@ -43,6 +43,9 @@ INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
 // Add gui controls to choose strobe colors
 COLOR_CONTROLS :: false
 
+// Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
+DEBUG_STATS :: #config(DEBUG_STATS, false)
+
 run_app :: proc(config: ^Config) {
     target_freq_hz: f32 = config.target_freq_hz
 
@@ -70,7 +73,7 @@ run_app :: proc(config: ^Config) {
     // Save target note to config when exiting the app
     defer config.target_freq_hz = target_note.frequency
 
-    if !gfx_init(1200 when ODIN_DEBUG else STROBE_WIDTH, 800 if COLOR_CONTROLS else 532, APP_NAME) do return
+    if !gfx_init(1200 when DEBUG_STATS else STROBE_WIDTH, 800 if COLOR_CONTROLS else 532, APP_NAME) do return
     defer gfx_shutdown()
 
     init_fonts()
@@ -92,8 +95,6 @@ run_app :: proc(config: ^Config) {
 
 
     strobe_display := init_strobe_display(
-        {0, 0},
-        {STROBE_WIDTH, 560},
         get_strobe_colors(config),
         strobe_bg_color,
         config.strobe_display_type,
@@ -355,6 +356,8 @@ run_app :: proc(config: ^Config) {
             )
         }
 
+        layout := compute_layout(gfx_window_size(), gfx_safe_area())
+
         // Draw the GUI controls
         gfx_begin_frame(hex(window_bg_color))
         defer gfx_end_frame()
@@ -362,22 +365,31 @@ run_app :: proc(config: ^Config) {
 
             // TODO
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
-            draw_strobe_display(&strobe_display, phase_comparator, out_of_range, config)
+            draw_strobe_display(
+                &strobe_display,
+                layout.strobe,
+                layout.strobe_scale,
+                phase_comparator,
+                out_of_range,
+                config,
+            )
 
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
 
-                if note_low_state do draw_text(font_store.medium_32, "◀", {10, 10}, 16, 0, hex(0x82E2FFFF))
-                else if note_high_state do draw_text(font_store.medium_32, "▶︎", {466, 10}, 16, 0, hex(0x82E2FFFF))
+                arrow_y := layout.strobe_top + 10
+                if note_low_state do draw_text(font_store.medium_32, "◀", {layout.strobe.x + 10, arrow_y}, 16, 0, hex(0x82E2FFFF))
+                else if note_high_state do draw_text(font_store.medium_32, "▶︎", {layout.strobe.x + layout.strobe.width - 22, arrow_y}, 16, 0, hex(0x82E2FFFF))
             }
 
 
             // -------------------------------------------------------------------------------------
 
-            draw_note(target_note, {16, 303}, freq_estimation_active)
+            draw_note(target_note, layout.note, freq_estimation_active)
 
             draw_measurements(
+                layout.measurements,
                 pitch_info,
                 last_good_pitch_info,
                 freq_estimation_active,
@@ -399,7 +411,7 @@ run_app :: proc(config: ^Config) {
 
             setup_strobe_display(&strobe_display, config.strobe_display_type)
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
-                {16, 456},
+                layout.strobe_mode,
                 config.strobe_mode,
             )
             if strobe_mode_changed {
@@ -416,7 +428,7 @@ run_app :: proc(config: ^Config) {
 
 
             note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle(
-                {148, 456},
+                layout.detection_mode,
                 config.note_detection_mode,
             )
 
@@ -440,28 +452,32 @@ run_app :: proc(config: ^Config) {
                 }
             }
 
-            gui_speed_slider({330, 352}, &strobe_speed_slider_value)
+            gui_speed_slider(layout.speed_slider, &strobe_speed_slider_value)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
             }
 
-            // TODO: add refresh button to show newly connected devices
-            audio_device_dropdown_active = gui_dropdown(
-                {12, 496},
-                240,
-                audio_devices[:],
-                &audio_device_dropdown_index,
-                audio_device_dropdown_active,
-                left_pad = 32,
-            )
+            // iOS routes the input itself: built-in mic, headset or an audio interface
+            when !IOS {
+                // TODO: add refresh button to show newly connected devices
+                audio_device_dropdown_active = gui_dropdown(
+                    layout.audio_device,
+                    240,
+                    audio_devices[:],
+                    &audio_device_dropdown_index,
+                    audio_device_dropdown_active,
+                    left_pad = 32,
+                )
 
-            // microphone icon
-            draw_texture(texture_atlas, {96, 192, 32, 32}, {20, 500, 16, 16})
+                // microphone icon
+                mic := layout.audio_device + {8, 4}
+                draw_texture(texture_atlas, {96, 192, 32, 32}, {mic.x, mic.y, 16, 16})
+            }
 
             if config.note_detection_mode != .AUTO {
                 tuning_preset_dropdown_active = gui_dropdown(
-                    {278, 456},
+                    layout.tuning_preset,
                     140,
                     {{0, "CHROMATIC"}, {1, "GUITAR STD"}, {2, "UKULELE STD"}},
                     &tuning_preset_choice,
@@ -470,7 +486,7 @@ run_app :: proc(config: ^Config) {
                 config.tuning_preset = TuningPreset(tuning_preset_choice)
             }
 
-            gui_feedback_button({461, 504})
+            gui_feedback_button(layout.feedback)
 
 
             when COLOR_CONTROLS {
@@ -502,22 +518,23 @@ run_app :: proc(config: ^Config) {
 
             // Draw input level
             {
-                draw_rect({264, 507}, {60, 3}, hex(strobe_bg_color))
+                meter := layout.level_meter
+                draw_rect(meter, {60, 3}, hex(strobe_bg_color))
                 draw_rect(
-                    {264, 507},
+                    meter,
                     {60 + clamp(pitch_info.rms_dbfs, -60, 0), 3},
                     hex(0x82E2FFFF),
                 )
 
-                when ODIN_DEBUG {
+                when DEBUG_STATS {
                     floor_level := core.dbfs(pitch_info.noise_floor)
-                    draw_rect({264, 511}, {60, 3}, hex(strobe_bg_color))
-                    draw_rect({264, 511}, {60 + floor_level, 3}, PURPLE)
+                    draw_rect(meter + {0, 4}, {60, 3}, hex(strobe_bg_color))
+                    draw_rect(meter + {0, 4}, {60 + floor_level, 3}, PURPLE)
 
                     draw_text(
                         font_store.medium_24,
                         fmt.ctprintf("RMS %.1f", pitch_info.rms_dbfs),
-                        {380, 400},
+                        layout.stats + {130, 0},
                         12,
                         0,
                         hex(0xFBFBFBFF),
@@ -526,7 +543,7 @@ run_app :: proc(config: ^Config) {
                     draw_text(
                         font_store.medium_24,
                         fmt.ctprintf("NF %.1f", floor_level),
-                        {380, 415},
+                        layout.stats + {130, 15},
                         12,
                         0,
                         hex(0xFBFBFBFF),
@@ -535,7 +552,7 @@ run_app :: proc(config: ^Config) {
                     draw_text(
                         font_store.medium_24,
                         fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
-                        {380, 430},
+                        layout.stats + {130, 30},
                         12,
                         0,
                         hex(0xFBFBFBFF),
@@ -543,12 +560,12 @@ run_app :: proc(config: ^Config) {
                 }
             }
 
-            when ODIN_DEBUG {
+            when DEBUG_STATS {
 
                 draw_text(
                     font_store.medium_24,
                     fmt.ctprintf("Band SNR %.1f", phase_comparator.bands[0].snr_db),
-                    {250, 400},
+                    layout.stats,
                     12,
                     0,
                     hex(0xFBFBFBFF),
@@ -557,7 +574,7 @@ run_app :: proc(config: ^Config) {
                 draw_text(
                     font_store.medium_24,
                     fmt.ctprintf("Band NF %.1f", core.dbfs(phase_comparator.bands[0].noise_floor)),
-                    {250, 415},
+                    layout.stats + {0, 15},
                     12,
                     0,
                     hex(0xFBFBFBFF),

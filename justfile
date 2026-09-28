@@ -35,19 +35,26 @@ build-portaudio:
     cmake --build . --config Release
     cp libportaudio.a ../../../
 
-dev:
-    odin run app -debug
+# just dev [target]
+#   (none) raylib renderer
+#   sdl    SDL3 GPU renderer with Metal shaders (brew install sdl3)
+#   stats  with the signal stats and NSDF plots
+#   ios    SDL renderer on the iOS simulator, the first run builds the native deps into external/ios-sim
+dev target="":
+    #!/usr/bin/env sh
+    case "{{target}}" in
+        "") odin run app -debug ;;
+        sdl) odin run app -debug -define:RENDERER=sdl ;;
+        stats) odin run app -debug -define:DEBUG_STATS=true ;;
+        ios) sh ios/build-sim.sh ;;
+        *) echo "Unknown target '{{target}}', use sdl, stats or ios"; exit 1 ;;
+    esac
 
-# SDL3 GPU renderer with Metal shaders (brew install sdl3)
-dev-sdl:
-    odin run app -debug -define:RENDERER=sdl
-
-build:
-    odin build app -o:speed -microarch:native
-
-build-sdl:
-    odin build app -o:speed -microarch:native -define:RENDERER=sdl
-
-# SDL renderer on the iOS simulator, the first run builds the native deps into external/ios-sim
-dev-ios:
-    sh ios/build-sim.sh
+# just build [sdl]
+build target="":
+    #!/usr/bin/env sh
+    case "{{target}}" in
+        "") odin build app -o:speed -microarch:native ;;
+        sdl) odin build app -o:speed -microarch:native -define:RENDERER=sdl ;;
+        *) echo "Unknown target '{{target}}', use sdl"; exit 1 ;;
+    esac

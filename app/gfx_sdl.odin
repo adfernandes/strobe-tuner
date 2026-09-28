@@ -173,6 +173,10 @@ when RENDERER == "sdl" {
             return false
         }
 
+        // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
+        // desktop sizes, and keeps rotating the phone away from portrait
+        when IOS do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
+
         gpu.window = sdl.CreateWindow(title, width, height, {.HIGH_PIXEL_DENSITY})
         if gpu.window == nil {
             fmt.eprintln("SDL_CreateWindow failed:", sdl.GetError())
@@ -405,6 +409,22 @@ when RENDERER == "sdl" {
 
     gfx_dpi_scale :: proc() -> f32 {
         return sdl.GetWindowPixelDensity(gpu.window)
+    }
+
+    gfx_window_size :: proc() -> [2]f32 {
+        w, h: i32
+        sdl.GetWindowSize(gpu.window, &w, &h)
+        return {f32(w), f32(h)}
+    }
+
+    // Part of the window clear of the notch and the home indicator
+    gfx_safe_area :: proc() -> Rect {
+        area: sdl.Rect
+        if !sdl.GetWindowSafeArea(gpu.window, &area) {
+            size := gfx_window_size()
+            return {0, 0, size.x, size.y}
+        }
+        return {f32(area.x), f32(area.y), f32(area.w), f32(area.h)}
     }
 
     key_pressed :: proc(key: Key) -> bool {
