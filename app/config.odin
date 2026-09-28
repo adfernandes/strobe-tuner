@@ -81,8 +81,8 @@ Config :: struct {
     strobe_blur:                  bool,
     // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
     motion_blur:                  bool,
-    // lamp-lit look of the old mechanical strobe tuners, see GLOW_PRESETS
-    strobe_glow:                  GlowPreset,
+    // lamp-lit look of the old mechanical strobe tuners in the colorway's hue, see get_glow_params
+    strobe_glow:                  bool,
     prevent_strobe_octave_jumps:  bool,
 
     // show different type of partial labels, eg partial number 1x, note name A2, or frequency 110Hz
@@ -120,10 +120,10 @@ config_defaults :: Config {
     strobe_speed                 = 0.0125,
     speed_multiplier             = 2.0,
     strobe_display_type          = .CURVED_TRACKS,
-    strobe_colorway              = .VIBRANT_RED,
+    strobe_colorway              = .AMBER,
     strobe_blur                  = true,
     motion_blur                  = true,
-    strobe_glow                  = .AMBER,
+    strobe_glow                  = true,
     prevent_strobe_octave_jumps  = true,
 
     // Custom colors

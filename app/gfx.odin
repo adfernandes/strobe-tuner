@@ -109,6 +109,7 @@ StrobeUniforms :: struct #align (16) {
     color_a:          [4]f32,
     color_b:          [4]f32,
     glow_color:       [4]f32,
+    glow_dark_color:  [4]f32, // filter hue of the dark stripes
     curvature_radius: f32,
     time_stretch:     f32,
     phase:            f32,

@@ -38,44 +38,11 @@ pill_violet := hex(0xA277FFFF)
 pill_yellow := hex(0xFFCA85FF)
 pill_dark := hex(0x2D2E35FF)
 
-gui_strobe_mode_toggle :: proc(
-    position: [2]f32,
-    active_strobe_mode: core.StrobeMode,
-) -> (
-    core.StrobeMode,
-    bool,
-) {
-    color: Color
-    label: cstring
-
-    if active_strobe_mode == .HARMONIC_MODE {
-        color = pill_mint
-        label = "HARMONIC"
-    } else {
-        color = pill_violet
-        label = "FINE"
-    }
-
-    width: f32 = 120
-    label_width := measure_text(font_store.medium_28, label, 14, 1).x
-
-    draw_pill({position.x, position.y, width, 24}, color)
-
-    draw_text(
-        font_store.medium_28,
-        label,
-        {position.x + (width - label_width) / 2, position.y + 5},
-        14,
-        1,
-        text_color_dark,
-    )
-
-    if gui_button({position.x, position.y, width, 24}) {
-        if active_strobe_mode == .HARMONIC_MODE do return .FINE_MODE, true
-        else do return .HARMONIC_MODE, true
-    }
-
-    return active_strobe_mode, false
+// Gray while the note follows the detected pitch, violet while it's locked
+gui_lock_toggle :: proc(rect: Rect, locked: bool) -> bool {
+    draw_pill(rect, pill_violet if locked else pill_gray)
+    draw_centered_label("LOCK NOTE", rect, text_color_dark)
+    return gui_button(rect)
 }
 
 
@@ -122,28 +89,46 @@ gui_strobe_partial :: proc(
 }
 
 
-// The note name is a button that toggles the lock, a locked note shows arrows below it to step by a semitone
-gui_note_lock :: proc(pos: [2]f32, locked: bool) -> (toggled: bool, step: int) {
-    toggled = gui_button({pos.x, pos.y, 112, 116})
+// Width of the slots either side of the note that hold the arrows, the layout leaves room for them
+NOTE_ARROW_SLOT :: 32
+NOTE_WIDTH :: 112
+NOTE_HEIGHT :: 116
+NOTE_BASELINE :: 98 // bottom of the letter, from the top of the note
+// The octave number ends short of NOTE_WIDTH, the right arrow moves in to be as far from it as the left one
+NOTE_RIGHT_ARROW_INSET :: 13
 
-    if locked {
-        prev := Rect{pos.x, pos.y + 116, 32, 32}
-        next := Rect{pos.x + 48, pos.y + 116, 32, 32}
-        draw_text(font_store.medium_32, "◀", {prev.x + 8, prev.y + 8}, 16, 0, hex(0x82E2FFFF))
-        draw_text(font_store.medium_32, "▶", {next.x + 8, next.y + 8}, 16, 0, hex(0x82E2FFFF))
-        if gui_button(prev) do step = -1
-        if gui_button(next) do step = 1
+// A locked note shows arrows either side of it to step by a semitone
+gui_note_arrows :: proc(pos: [2]f32, locked: bool) -> (step: int) {
+    if !locked do return
+
+    prev := Rect{pos.x - NOTE_ARROW_SLOT, pos.y, NOTE_ARROW_SLOT, NOTE_HEIGHT}
+    next := Rect{pos.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET, pos.y, NOTE_ARROW_SLOT, NOTE_HEIGHT}
+
+    // Drawn from the large font so they stay sharp on 3x screens
+    ARROW_SIZE :: 26
+    ARROW_HEIGHT :: 18 // of the triangle itself, it sits in the middle of the line
+    for arrow, i in ([2]cstring{"◀", "▶"}) {
+        slot := prev if i == 0 else next
+        size := measure_text(font_store.medium_192, arrow, ARROW_SIZE, 0)
+        // Sitting on the baseline of the letter
+        center_y := slot.y + NOTE_BASELINE - ARROW_HEIGHT / 2
+        position := [2]f32{slot.x + (slot.width - size.x) / 2, center_y - size.y / 2}
+        draw_text(font_store.medium_192, arrow, position, ARROW_SIZE, 0, hex(0xFBFBFBFF))
     }
+
+    // A finger is wider than the slots, the touch areas reach a little past them
+    if gui_button({prev.x - 6, prev.y, prev.width + 12, prev.height}) do step = -1
+    if gui_button({next.x - 6, next.y, next.width + 12, next.height}) do step = 1
 
     return
 }
 
 
-// Strobe speeds per cent of detuning, precision spins 4× faster for the final adjustment
+// Strobe speeds per cent of detuning, fast spins 4× faster for the final adjustment
 RESPONSE_SPEEDS :: [2]f32{0.0125, 0.05}
-RESPONSE_LABELS :: [2]cstring{"CALM", "PRECISION"}
+RESPONSE_LABELS :: [2]cstring{"SLOW", "FAST"}
 
-gui_response_toggle :: proc(position: [2]f32, speed: f32) -> (f32, bool) {
+gui_response_toggle :: proc(rect: Rect, speed: f32) -> (f32, bool) {
     speeds := RESPONSE_SPEEDS
     labels := RESPONSE_LABELS
 
@@ -153,20 +138,10 @@ gui_response_toggle :: proc(position: [2]f32, speed: f32) -> (f32, bool) {
         if abs(math.log2(s / speed)) < abs(math.log2(speeds[step] / speed)) do step = i
     }
 
-    width: f32 = 146
-    label_width := measure_text(font_store.medium_28, labels[step], 14, 1).x
+    draw_pill(rect, pill_yellow if step == 0 else pill_mint)
+    draw_centered_label(labels[step], rect, text_color_dark)
 
-    draw_pill({position.x, position.y, width, 24}, pill_yellow)
-    draw_text(
-        font_store.medium_28,
-        labels[step],
-        {position.x + (width - label_width) / 2, position.y + 5},
-        14,
-        1,
-        text_color_dark,
-    )
-
-    if gui_button({position.x, position.y, width, 24}) {
+    if gui_button(rect) {
         return speeds[(step + 1) % len(speeds)], true
     }
 
@@ -181,6 +156,11 @@ gui_button :: proc(bounds: Rect) -> bool {
         }
     }
     return false
+}
+
+// Whether the button is being held down, to draw it in its pressed shade
+gui_button_held :: proc(bounds: Rect) -> bool {
+    return mouse_down() && point_in_rect(mouse_position(), bounds) && !exclusive_control_mode
 }
 
 
@@ -321,7 +301,7 @@ draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     )
 }
 
-// pos is the top left of the Hz label
+// Two right aligned columns, Hz and cents, pos is the top right of the cents column
 draw_measurements :: proc(
     pos: [2]f32,
     pitch: core.PitchInfo,
@@ -348,28 +328,41 @@ draw_measurements :: proc(
     muted_color := hex(0x7D7E8FFF)
 
     color := light_color if freq_estimation_active else muted_color
-    font := font_store.bold_36 if freq_estimation_active else font_store.medium_32
+    // Drawn from the large font so the values stay sharp on 3x screens
+    font := font_store.medium_48
 
-    draw_text(font_store.medium_32, "Hz", pos, 16, 1, light_color)
+    // The right edge of each column is fixed so the digits don't shift sideways
+    LABEL_SIZE :: 16
+    VALUE_SIZE :: 32
+    VALUE_Y :: 20
+    hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
 
-    draw_text(
-        font,
-        "-" if show_placeholder else fmt.ctprintf("%.1f", hz),
-        pos + {0, 21},
-        18,
-        1,
-        color,
-    )
+    draw_text_right(font_store.medium_32, "Hz", hz_right, LABEL_SIZE, 1, light_color)
+    hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
+    draw_text_right(font, hz_str, hz_right + {0, VALUE_Y}, VALUE_SIZE, 0, color)
 
-    draw_text(font_store.medium_32, "Cents", pos + {85, 0}, 16, 1, light_color)
+    draw_text_right(font_store.medium_32, "Cents", pos, LABEL_SIZE, 1, light_color)
 
     cents_str := fmt.ctprintf("%.1f", math.abs(cents))
     show_minus_sign := cents < 0 && cents_str != "0.0"
 
-    if show_minus_sign || show_placeholder {
-        draw_text(font, "-", pos + {85, 21}, 18, 1, color)
+    if show_placeholder {
+        draw_text_right(font, "-", pos + {0, VALUE_Y}, VALUE_SIZE, 0, color)
+    } else {
+        draw_text_right(font, cents_str, pos + {0, VALUE_Y}, VALUE_SIZE, 0, color)
+        // The minus hangs to the left of the number
+        if show_minus_sign {
+            width := measure_text(font, cents_str, VALUE_SIZE, 0).x
+            draw_text_right(font, "-", pos + {-width - 2, VALUE_Y}, VALUE_SIZE, 0, color)
+        }
     }
+}
 
-    draw_text(font, "" if show_placeholder else cents_str, pos + {95, 21}, 18, 1, color)
+// From the right edge of the cents column to the right edge of the Hz column
+HZ_COLUMN_OFFSET :: 120
 
+// pos is the top right of the text
+draw_text_right :: proc(font: Font, text: cstring, pos: [2]f32, size, spacing: f32, color: Color) {
+    width := measure_text(font, text, size, spacing).x
+    draw_text(font, text, {pos.x - width, pos.y}, size, spacing, color)
 }

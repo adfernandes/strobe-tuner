@@ -19,6 +19,7 @@ package app
 StrobeColorway :: enum {
     VIBRANT_RED,
     MINTY,
+    AMBER,
     CUSTOM,
 }
 
@@ -27,24 +28,30 @@ minty: [2]u32 : {0xB5F2DBFF, 0x6B3D7DFF}
 
 vibrant_red: [2]u32 : {0xFF6767FF, 0x6B4949FF}
 
+amber: [2]u32 : {0xFF9A4DFF, 0x6B4A38FF}
 
-// Lamp glow on the strobe, cycled with G
-GlowPreset :: enum {
-    OFF,
-    AMBER,
-    RED,
-}
 
+// Lamp glow on the strobe, the lamp-lit look of the old mechanical strobe tuners, toggled with G.
+// The lamp shines through a filter in the colorway's hue.
 GlowParams :: struct {
     color:      u32, // filter hue the lamp shines through
+    dark_color: u32, // filter hue of the dark stripes, the same as color for a single hue
     exposure:   f32, // higher shifts the lit stripes towards yellow/white
     saturation: f32, // 1 keeps the full color, lower mixes in gray
 }
 
-GLOW_PRESETS := [GlowPreset]GlowParams {
-    .OFF   = {},
-    .AMBER = {color = 0xFF803CFF, exposure = 4.5, saturation = 0.8},
-    .RED   = {color = 0xFF6767FF, exposure = 3.5, saturation = 1.0},
+get_glow_params :: proc(config: ^Config) -> GlowParams {
+    switch config.strobe_colorway {
+    case .VIBRANT_RED:
+        return {color = 0xFF6767FF, dark_color = 0xFF6767FF, exposure = 3.5, saturation = 0.75}
+    case .MINTY:
+        return {color = 0x7DF2C4FF, dark_color = minty[1], exposure = 3.0, saturation = 1.0}
+    case .AMBER:
+        return {color = 0xFF803CFF, dark_color = 0xFF803CFF, exposure = 4.5, saturation = 0.8}
+    case .CUSTOM:
+        return {color = config.strobe_color_1, dark_color = config.strobe_color_2, exposure = 3.5, saturation = 1.0}
+    }
+    return {}
 }
 
 get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
@@ -53,6 +60,8 @@ get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
         return vibrant_red
     case .MINTY:
         return minty
+    case .AMBER:
+        return amber
     case .CUSTOM:
         return {config.strobe_color_1, config.strobe_color_2}
     }

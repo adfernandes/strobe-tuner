@@ -20,9 +20,11 @@ import "core:fmt"
 import "core:math"
 import "core:time"
 
+import "../core"
+
 // The settings screen, opened with the cog in the bottom right corner.
-// Everything that isn't needed while tuning lives here, the main screen keeps the note lock,
-// the strobe mode and the response.
+// Everything that isn't needed while tuning lives here, the main screen keeps the note lock
+// and the strobe speed.
 
 PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
@@ -71,6 +73,17 @@ gui_settings :: proc(
     }
 
     {
+        // Harmonic shows a track per partial, fine the same frequency at different sensitivities
+        rect := settings_row(l, row, "Mode", 2 * 80)
+        row += 1
+        labels := []cstring{"Harmonic", "Fine"}
+        if i, ok := gui_segmented(rect, labels, int(config.strobe_mode)); ok {
+            config.strobe_mode = core.StrobeMode(i)
+            changed = true
+        }
+    }
+
+    {
         rect := settings_row(l, row, "Display", 2 * SEGMENT_WIDTH)
         row += 1
         labels := []cstring{"Tracks", "Wheel"}
@@ -81,16 +94,24 @@ gui_settings :: proc(
 
     {
         // Custom colors are set in the config file, no segment is selected then
-        styles := STROBE_STYLES
-        labels: [len(STROBE_STYLES)]cstring
-        for style, i in styles do labels[i] = style.label
+        labels := []cstring{"Red", "Minty", "Amber"}
+        selected := -1 if config.strobe_colorway == .CUSTOM else int(config.strobe_colorway)
 
-        rect := settings_row(l, row, "Style", len(styles) * SEGMENT_WIDTH)
+        rect := settings_row(l, row, "Colors", 3 * SEGMENT_WIDTH)
         row += 1
-        if i, ok := gui_segmented(rect, labels[:], strobe_style_index(config^)); ok {
-            // A glow keeps the colorway, turning it off with G brings the stripe colors back
-            config.strobe_glow = styles[i].glow
-            if styles[i].glow == .OFF do config.strobe_colorway = styles[i].colorway
+        if i, ok := gui_segmented(rect, labels, selected); ok {
+            config.strobe_colorway = StrobeColorway(i)
+            changed = true
+        }
+    }
+
+    {
+        // Lights the stripes like a lamp behind the disc, in the hue of the colors above
+        rect := settings_row(l, row, "Retro glow", 2 * SEGMENT_WIDTH)
+        row += 1
+        labels := []cstring{"Off", "On"}
+        if i, ok := gui_segmented(rect, labels, int(config.strobe_glow)); ok {
+            config.strobe_glow = i == 1
             changed = true
         }
     }
@@ -138,7 +159,7 @@ gui_settings :: proc(
         // Everything back to the defaults like the R key, including what's only in the config file
         rect := settings_row(l, row, "Reset to defaults", 2 * SEGMENT_WIDTH)
         row += 1
-        draw_pill(rect, pill_dark)
+        draw_pill(rect, pill_gray if gui_button_held(touch_area(rect)) else pill_dark)
         draw_centered_label("Reset", rect, settings_title_color)
         if gui_button(touch_area(rect)) {
             config^ = get_config_defaults()
@@ -147,31 +168,6 @@ gui_settings :: proc(
     }
 
     return
-}
-
-
-StrobeStyle :: struct {
-    label:    cstring,
-    colorway: StrobeColorway, // only used without a glow
-    glow:     GlowPreset,
-}
-
-// The glow lights the stripes with its own lamp color instead of the colorway, so they're picked together
-STROBE_STYLES :: [4]StrobeStyle {
-    {"Red", .VIBRANT_RED, .OFF},
-    {"Minty", .MINTY, .OFF},
-    {"Amber", .VIBRANT_RED, .AMBER},
-    {"Ruby", .VIBRANT_RED, .RED},
-}
-
-// -1 for custom colors
-strobe_style_index :: proc(config: Config) -> int {
-    styles := STROBE_STYLES
-    for style, i in styles {
-        if style.glow != config.strobe_glow do continue
-        if style.glow != .OFF || style.colorway == config.strobe_colorway do return i
-    }
-    return -1
 }
 
 
@@ -267,7 +263,6 @@ stepper_scroll: f32
 stepper_last_click: time.Tick
 
 
-@(private = "file")
 draw_centered_label :: proc(label: cstring, rect: Rect, color: Color) {
     width := measure_text(font_store.medium_28, label, 14, 1).x
     draw_text(font_store.medium_28, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - 14) / 2}, 14, 1, color)

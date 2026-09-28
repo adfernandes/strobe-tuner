@@ -311,8 +311,7 @@ run_app :: proc(config: ^Config) {
         }
 
         if key_pressed(.G) {
-            // Cycle through the glow presets, OFF is first so wrap around to the start
-            config.strobe_glow = GlowPreset((int(config.strobe_glow) + 1) % len(GlowPreset))
+            config.strobe_glow = !config.strobe_glow
         }
 
         if key_pressed(.I) && config.strobe_mode == .HARMONIC_MODE {
@@ -416,8 +415,9 @@ run_app :: proc(config: ^Config) {
 
             draw_note(target_note, layout.note, freq_estimation_active)
 
-            // Tap the note (or space) to lock it, the arrows step a locked note by a semitone
-            lock_toggled, step := gui_note_lock(layout.note, note_locked)
+            // The lock button (or space) locks the note, the arrows step a locked note by a semitone
+            step := gui_note_arrows(layout.note, note_locked)
+            lock_toggled := gui_lock_toggle(layout.lock, note_locked)
             if key_pressed(.SPACE) do lock_toggled = true
             if key_pressed(.LEFT) do step = -1
             if key_pressed(.RIGHT) do step = 1
@@ -458,22 +458,6 @@ run_app :: proc(config: ^Config) {
 
 
             setup_strobe_display(&strobe_display, config.strobe_display_type)
-            strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
-                layout.strobe_mode,
-                config.strobe_mode,
-            )
-            if strobe_mode_changed {
-                config.strobe_mode = strobe_mode
-                core.set_phase_comparator_freq(
-                    phase_comparator,
-                    target_note.frequency,
-                    config.pitch_standard,
-                    config.strobe_speed,
-                    config.speed_multiplier,
-                    config.strobe_mode,
-                )
-            }
-
 
             if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
                 config.strobe_speed = speed
@@ -512,13 +496,13 @@ run_app :: proc(config: ^Config) {
 
             // Draw input level, the microphone icon marks it as the input
             {
-                draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -7}, icon_color)
+                draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -6}, icon_color)
 
                 meter := layout.level_meter + {20, 0}
-                draw_rect(meter, {60, 3}, hex(strobe_bg_color))
-                draw_rect(
-                    meter,
-                    {60 + clamp(pitch_info.rms_dbfs, -60, 0), 3},
+                draw_rounded_rect({meter.x, meter.y, 60, 4}, 2, hex(strobe_bg_color))
+                draw_rounded_rect(
+                    {meter.x, meter.y, 60 + clamp(pitch_info.rms_dbfs, -60, 0), 4},
+                    2,
                     hex(0x82E2FFFF),
                 )
 

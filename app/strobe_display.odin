@@ -143,7 +143,7 @@ glow_background :: proc(background: Color, glow: GlowParams) -> Color {
     MIN_LAMP :: 0.6
     BACKGROUND_LIFT :: 0.25
 
-    glow_color := normalize_color(hex(glow.color)).rgb
+    glow_color := normalize_color(hex(glow.dark_color)).rgb
     filter := glow_color / max(glow_color.r, glow_color.g, glow_color.b, 0.001)
     filter *= filter
 
@@ -220,8 +220,8 @@ draw_strobe_display :: proc(
     curvature_radius *= scale
     band_height *= scale
 
-    glow_enabled := config.strobe_glow != .OFF
-    glow_params := GLOW_PRESETS[config.strobe_glow]
+    glow_enabled := config.strobe_glow
+    glow_params := get_glow_params(config)
 
     // Shared by all bands, draw_strobe_bands fills in the rest
     uniforms := StrobeUniforms {
@@ -232,6 +232,7 @@ draw_strobe_display :: proc(
         // The wheel is lit evenly all around, the tracks only show the top of the disc
         lamp_spread     = 1000.0 if self.display_type == .SPINNING_WHEEL else 0.45,
         glow_color      = normalize_color(hex(glow_params.color)),
+        glow_dark_color = normalize_color(hex(glow_params.dark_color)),
         glow_exposure   = glow_params.exposure,
         glow_saturation = glow_params.saturation,
         color_a         = normalize_color(self.colors.x),
