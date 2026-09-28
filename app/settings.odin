@@ -186,20 +186,23 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
 // Label on the left, the control right aligned, returns where the control goes
 @(private = "file")
 settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_width: f32) -> Rect {
-    y := l.rows.y + f32(index) * SETTINGS_ROW_HEIGHT
+    y := l.rows.y + f32(index) * l.row_height
 
-    draw_text(font_store.medium_28, label, {l.rows.x, y + (SETTINGS_ROW_HEIGHT - 14) / 2}, 14, 1, text_color_light)
-    draw_rect({l.rows.x, y + SETTINGS_ROW_HEIGHT - 1}, {l.width, 1}, settings_separator_color)
+    draw_text(font_store.medium_28, label, {l.rows.x, y + (l.row_height - 14) / 2}, 14, 1, text_color_light)
+    draw_rect({l.rows.x, y + l.row_height - 1}, {l.width, 1}, settings_separator_color)
 
-    control_y := y + (SETTINGS_ROW_HEIGHT - SETTINGS_CONTROL_HEIGHT) / 2
-    return {l.rows.x + l.width - control_width, control_y, control_width, SETTINGS_CONTROL_HEIGHT}
+    return {
+        l.rows.x + l.width - control_width,
+        y + SETTINGS_CONTROL_MARGIN,
+        control_width,
+        l.row_height - 2 * SETTINGS_CONTROL_MARGIN,
+    }
 }
 
 // The pills are slimmer than a finger, taps anywhere in the height of their row count
 @(private = "file")
 touch_area :: proc(rect: Rect) -> Rect {
-    pad := (SETTINGS_ROW_HEIGHT - rect.height) / 2
-    return {rect.x, rect.y - pad, rect.width, SETTINGS_ROW_HEIGHT}
+    return {rect.x, rect.y - SETTINGS_CONTROL_MARGIN, rect.width, rect.height + 2 * SETTINGS_CONTROL_MARGIN}
 }
 
 
@@ -212,7 +215,9 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, boo
         segment := Rect{rect.x + f32(i) * segment_width, rect.y, segment_width, rect.height}
 
         if i == selected {
-            draw_pill(segment, pill_yellow)
+            // Inset so the track shows around it, the radius shrinks by as much and the ends stay concentric
+            INSET :: 2
+            draw_pill({segment.x + INSET, segment.y + INSET, segment.width - 2 * INSET, segment.height - 2 * INSET}, pill_yellow)
             draw_centered_label(label, segment, text_color_dark)
         } else {
             draw_centered_label(label, segment, text_color_light)

@@ -39,7 +39,7 @@ Layout :: struct {
 // Taller than wide by this much gets the portrait layout
 PORTRAIT_ASPECT :: 1.3
 PANEL_PADDING :: 16
-DESKTOP_HEIGHT :: 564 // the window, as wide as the strobe
+DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 
 RULER_HEIGHT :: 110
@@ -59,8 +59,13 @@ note_right :: proc(l: Layout) -> f32 {
 }
 
 compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> Layout {
-    if window.y > window.x * PORTRAIT_ASPECT do return portrait_layout(window, safe, ruler)
+    if is_portrait(window) do return portrait_layout(window, safe, ruler)
     return desktop_layout(ruler)
+}
+
+@(private = "file")
+is_portrait :: proc(window: [2]f32) -> bool {
+    return window.y > window.x * PORTRAIT_ASPECT
 }
 
 @(private = "file")
@@ -139,28 +144,31 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
 }
 
 // The settings, a sheet up from the bottom as tall as its rows, the strobe above it stays in sight to
-// show the changes. The same on desktop and phone.
+// show the changes. The same on desktop and phone, with shorter rows for a mouse.
 SettingsLayout :: struct {
-    sheet: Rect, // runs to the bottom of the window
-    title: [2]f32,
-    close: Rect, // touch area of the ✕
-    rows:  [2]f32, // top left of the first row
-    width: f32,
+    sheet:      Rect, // runs to the bottom of the window
+    title:      [2]f32,
+    close:      Rect, // touch area of the ✕
+    rows:       [2]f32, // top left of the first row
+    width:      f32,
+    row_height: f32, // the controls are SETTINGS_CONTROL_MARGIN shorter at the top and bottom
 }
 
 SETTINGS_ICON_SIZE :: 24 // the sliders, right aligned on the main screen
-SETTINGS_ROW_HEIGHT :: 44
-SETTINGS_CONTROL_HEIGHT :: 32 // the pills, their touch area is the whole row height
+SETTINGS_ROW_HEIGHT :: 44 // a finger
+SETTINGS_COMPACT_ROW_HEIGHT :: 36 // a mouse
+SETTINGS_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
 SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way
 compute_settings_layout :: proc(window: [2]f32, safe: Rect, open: f32) -> (l: SettingsLayout) {
     left := safe.x + PANEL_PADDING
     l.width = safe.width - 2 * PANEL_PADDING
+    l.row_height = SETTINGS_ROW_HEIGHT if is_portrait(window) else SETTINGS_COMPACT_ROW_HEIGHT
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
-    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + SETTINGS_ROWS * SETTINGS_ROW_HEIGHT + below
+    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + SETTINGS_ROWS * l.row_height + below
     height = min(height, window.y - safe.y)
     l.sheet = {0, window.y - open * height, window.x, height}
 
