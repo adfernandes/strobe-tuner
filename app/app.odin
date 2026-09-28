@@ -87,8 +87,8 @@ run_app :: proc(config: ^Config) {
     if !gfx_init(1200 when DEBUG_STATS else STROBE_WIDTH, 800 if COLOR_CONTROLS else DESKTOP_HEIGHT, APP_NAME) do return
     defer gfx_shutdown()
 
-    init_fonts()
-    defer destroy_fonts()
+    // Loaded each frame for the screen's scale, see update_pixel_fonts
+    defer unload_pixel_fonts()
 
     load_shapes()
     defer unload_shapes()
@@ -470,7 +470,7 @@ run_app :: proc(config: ^Config) {
                 color_picker({20, 500, 200, 200}, &color1)
                 config.strobe_color_1 = to_hex(color1)
                 draw_text(
-                    font_store.medium_32,
+                    pixel_fonts.label_large.font,
                     fmt.ctprintf("%x", config.strobe_color_1),
                     {20, 480},
                     16,
@@ -481,7 +481,7 @@ run_app :: proc(config: ^Config) {
                 color_picker({300, 500, 200, 200}, &color2)
                 config.strobe_color_2 = to_hex(color2)
                 draw_text(
-                    font_store.medium_32,
+                    pixel_fonts.label_large.font,
                     fmt.ctprintf("%x", config.strobe_color_2),
                     {300, 480},
                     16,
@@ -511,7 +511,7 @@ run_app :: proc(config: ^Config) {
                     draw_rect(meter + {0, 4}, {60 + floor_level, 3}, PURPLE)
 
                     draw_text(
-                        font_store.medium_24,
+                        pixel_fonts.label_small.font,
                         fmt.ctprintf("RMS %.1f", pitch_info.rms_dbfs),
                         layout.stats + {130, 0},
                         12,
@@ -520,7 +520,7 @@ run_app :: proc(config: ^Config) {
                     )
 
                     draw_text(
-                        font_store.medium_24,
+                        pixel_fonts.label_small.font,
                         fmt.ctprintf("NF %.1f", floor_level),
                         layout.stats + {130, 15},
                         12,
@@ -529,7 +529,7 @@ run_app :: proc(config: ^Config) {
                     )
 
                     draw_text(
-                        font_store.medium_24,
+                        pixel_fonts.label_small.font,
                         fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
                         layout.stats + {130, 30},
                         12,
@@ -542,7 +542,7 @@ run_app :: proc(config: ^Config) {
             when DEBUG_STATS {
 
                 draw_text(
-                    font_store.medium_24,
+                    pixel_fonts.label_small.font,
                     fmt.ctprintf("Band SNR %.1f", phase_comparator.bands[0].snr_db),
                     layout.stats,
                     12,
@@ -551,7 +551,7 @@ run_app :: proc(config: ^Config) {
                 )
 
                 draw_text(
-                    font_store.medium_24,
+                    pixel_fonts.label_small.font,
                     fmt.ctprintf("Band NF %.1f", core.dbfs(phase_comparator.bands[0].noise_floor)),
                     layout.stats + {0, 15},
                     12,
@@ -561,7 +561,7 @@ run_app :: proc(config: ^Config) {
 
 
                 draw_text(
-                    font_store.medium_32,
+                    pixel_fonts.label_large.font,
                     fmt.ctprintf("Clarity %.3f", pitch_info.clarity),
                     {500, 10},
                     16,
@@ -570,7 +570,7 @@ run_app :: proc(config: ^Config) {
                 )
                 if pitch_info.is_strong_pitch {
                     draw_text(
-                        font_store.medium_32,
+                        pixel_fonts.label_large.font,
                         fmt.ctprintf("strong"),
                         {600, 10},
                         16,
@@ -581,7 +581,7 @@ run_app :: proc(config: ^Config) {
                 }
                 if pitch_info.is_weak_pitch {
                     draw_text(
-                        font_store.medium_32,
+                        pixel_fonts.label_large.font,
                         fmt.ctprintf("weak"),
                         {600, 10},
                         16,
@@ -594,13 +594,13 @@ run_app :: proc(config: ^Config) {
                     Rect{520, 40, 660, 200},
                     &pitch_detector.nsdf,
                     pitch_info.nsdf_peak,
-                    font_store.medium_24,
+                    pixel_fonts.label_small.font,
                 )
 
                 draw_freq_plot(
                     Rect{520, 300, 660, 200},
                     &pitch_detector.nsdf,
-                    font_store.medium_24,
+                    pixel_fonts.label_small.font,
                 )
             }
         }

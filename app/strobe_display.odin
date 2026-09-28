@@ -303,16 +303,13 @@ draw_strobe_display :: proc(
             r += band_height
             sin := math.sqrt(r * r - cos * cos)
 
-            if config.show_band_cents {
-                // Cents offset
-                draw_text(
-                    font_store.medium_32,
-                    fmt.ctprintf("%.4f", band.err_cents),
-                    {rect.x + 16, y + band_height * (f32(order) + 0.6) + r - sin},
-                    16,
-                    0,
-                    hex(0x82E2FFFF),
-                )
+            // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
+            // decimal point like the readout, the digits don't shift as the value changes.
+            if config.show_band_cents && band.snr_db > band.noise_floor_snr_db_threshold {
+                font := pixel_fonts.label_large
+                right := rect.x + 16 + measure_label(font, "-00.0").x
+                text := fmt.ctprintf("%+.1f", band.err_cents)
+                draw_text_right(font.font, text, {right, y + band_height * (f32(order) + 0.6) + r - sin}, font.size, 0, hex(0x82E2FFFF))
             }
 
             // Partial order, e.g. 1x, 2x, etc

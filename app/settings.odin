@@ -51,7 +51,7 @@ gui_settings :: proc(
     // Over the main screen
     draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(window_bg_color))
 
-    draw_text(font_store.bold_36, "Settings", l.title, 18, 1, text_color_white)
+    draw_label(pixel_fonts.title, "Settings", l.title, text_color_white, 1)
 
     // 16pt icon in the middle of a larger touch area
     draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
@@ -178,7 +178,7 @@ gui_settings :: proc(
 
 // 24pt icon in the middle of a 2x larger touch area
 gui_settings_button :: proc(position: [2]f32) -> bool {
-    draw_icon(ICON_SLIDERS, position, icon_color, SETTINGS_ICON_SIZE)
+    draw_icon(ICON_SLIDERS, position, icon_color, large = true)
     return gui_button({position.x - 12, position.y - 12, 48, 48})
 }
 
@@ -188,7 +188,7 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
 settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_width: f32) -> Rect {
     y := l.rows.y + f32(index) * l.row_height
 
-    draw_text(font_store.medium_28, label, {l.rows.x, y + (l.row_height - 14) / 2}, 14, 1, text_color_light)
+    draw_label(pixel_fonts.label, label, {l.rows.x, y + (l.row_height - LABEL_SIZE) / 2}, text_color_light, 1)
     draw_rect({l.rows.x, y + l.row_height - 1}, {l.width, 1}, settings_separator_color)
 
     return {
@@ -274,6 +274,6 @@ stepper_last_click: time.Tick
 
 
 draw_centered_label :: proc(label: cstring, rect: Rect, color: Color) {
-    width := measure_text(font_store.medium_28, label, 14, 1).x
-    draw_text(font_store.medium_28, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - 14) / 2}, 14, 1, color)
+    width := measure_label(pixel_fonts.label, label, 1).x
+    draw_label(pixel_fonts.label, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - LABEL_SIZE) / 2}, color, 1)
 }

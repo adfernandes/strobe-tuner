@@ -62,8 +62,8 @@ gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: Color) -> b
     draw_pill(led, color if on else pill_dark)
 
     label_x := pos.x + LED_SIZE + LABEL_GAP
-    label_width := measure_text(font_store.medium_28, label, 14, 1).x
-    draw_text(font_store.medium_28, label, {label_x, pos.y - 7}, 14, 1, text_color_white if on else text_color_light)
+    label_width := measure_label(pixel_fonts.label, label, 1).x
+    draw_label(pixel_fonts.label, label, {label_x, pos.y - 7}, text_color_white if on else text_color_light, 1)
 
     // The whole of the LED and the label, a little past them on each side
     width := label_x + label_width - pos.x
@@ -76,16 +76,15 @@ LOCK_BUTTON_HEIGHT :: 24
 // middle of the button.
 gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
     LABEL :: "LOCK NOTE"
-    LABEL_SIZE :: 14
     PADDING :: 10
     TOUCH_HEIGHT :: 44
 
-    label_size := measure_text(font_store.medium_28, LABEL, LABEL_SIZE, 1)
+    label_size := measure_label(pixel_fonts.label, LABEL, 1)
     width := label_size.x + 2 * PADDING
     rect := Rect{center.x - width / 2, center.y - LOCK_BUTTON_HEIGHT / 2, width, LOCK_BUTTON_HEIGHT}
 
     draw_pill(rect, pill_violet if locked else pill_gray)
-    draw_text(font_store.medium_28, LABEL, snap_to_pixels(center - label_size / 2), LABEL_SIZE, 1, text_color_dark)
+    draw_label(pixel_fonts.label, LABEL, center - label_size / 2, text_color_dark, 1)
 
     return gui_button({rect.x, center.y - TOUCH_HEIGHT / 2, rect.width, TOUCH_HEIGHT})
 }
@@ -101,14 +100,11 @@ gui_strobe_partial :: proc(
 ) {
 
     text: cstring
-    text_size: [2]f32
-    font := font_store.medium_32
-    font_size: f32 = 16
+    font := pixel_fonts.label_large
 
     if type == .FREQUENCY {
-        font = font_store.medium_28
+        font = pixel_fonts.label
         text = fmt.ctprintf("%.1fHz", band.freq_hz)
-        font_size = 14
     } else if type == .NOTE_NAMES {
         // Inter has no ♯, a plain # reads fine at this size
         text = fmt.ctprintf(
@@ -121,10 +117,10 @@ gui_strobe_partial :: proc(
         text = fmt.ctprintf("%v×", band.interval)
     }
 
-    text_size = measure_text(font, text, font_size, 0)
+    text_size := measure_label(font, text)
     bounds: Rect = {position.x - text_size.x, position.y, text_size.x, text_size.y}
 
-    draw_text(font, text, {bounds.x, bounds.y}, font_size, 0, hex(0x82E2FFFF))
+    draw_label(font, text, {bounds.x, bounds.y}, hex(0x82E2FFFF))
 
     if gui_button(bounds) {
         if type == .MULTIPLES do return .FREQUENCY, true
@@ -149,22 +145,15 @@ draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     color := text_color_white if freq_estimation_active else text_color_muted
 
     // Note name
-    draw_text(font_store.medium_256, fmt.ctprintf("%v", note.name), pos, 128, 0, color)
+    draw_label(pixel_fonts.note_name, fmt.ctprintf("%v", note.name), pos, color)
 
     // Sharp sign
     if note.is_accidental {
-        draw_text(font_store.noto_medium_96, "♯", {pos.x + 76, pos.y + 12}, 48, 0, color)
+        draw_label(pixel_fonts.note_name_sharp, "♯", {pos.x + 76, pos.y + 12}, color)
     }
 
     // Octave number
-    draw_text(
-        font_store.medium_76,
-        fmt.ctprintf("%v", note.octave),
-        {pos.x + 76, pos.y + 72},
-        38,
-        0,
-        color,
-    )
+    draw_label(pixel_fonts.note_octave, fmt.ctprintf("%v", note.octave), {pos.x + 76, pos.y + 72}, color)
 }
 
 // A locked note shows arrows either side of it to step by a semitone
@@ -354,13 +343,12 @@ gui_dropdown :: proc(
 
     if selected_idx != nil {
         label := strings.cut(options[selected_idx^].label, 0, max_text_len)
-        draw_text(
-            font_store.medium_28,
+        draw_label(
+            pixel_fonts.label,
             fmt.ctprintf("%s", label),
-            {position.x + left_pad, position.y + (height - 14) / 2},
-            14,
-            1,
+            {position.x + left_pad, position.y + (height - LABEL_SIZE) / 2},
             text_color_light,
+            1,
         )
     }
 
@@ -423,14 +411,7 @@ gui_dropdown :: proc(
 
             text_pos := [2]f32{option_bounds.x + 12, option_bounds.y + 4}
             label := strings.cut(opt.label, 0, max_text_len)
-            draw_text(
-                font_store.medium_28,
-                fmt.ctprintf("%s", label),
-                text_pos,
-                14,
-                1,
-                hex(0xFFFFFFFF) if hover else text_color_light,
-            )
+            draw_label(pixel_fonts.label, fmt.ctprintf("%s", label), text_pos, hex(0xFFFFFFFF) if hover else text_color_light, 1)
         }
     }
 
@@ -470,9 +451,8 @@ draw_measurements :: proc(
     value := pixel_fonts.readout
 
     // The labels stay in the background, the values and the note are what's read
-    LABEL_SIZE :: 14
     VALUE_Y :: 18
-    label_font := font_store.medium_32
+    label_font := pixel_fonts.label.font
     hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
     cents_str := "-" if show_placeholder else fmt.ctprintf("%.1f", math.abs(cents))
     minus := !show_placeholder && cents < 0 && cents_str != "0.0"
@@ -480,19 +460,19 @@ draw_measurements :: proc(
     switch align {
     case .CENTER:
         hz_right := pos + {-READOUT_GUTTER / 2, 0}
-        draw_text_right(label_font, "Hz", hz_right, LABEL_SIZE, 1, text_color_muted)
+        draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
         draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
 
         cents_left := pos + {READOUT_GUTTER / 2, 0}
-        draw_text(label_font, "Cents", snap_to_pixels(cents_left), LABEL_SIZE, 1, text_color_muted)
+        draw_text(label_font, "Cents", snap_to_pixels(cents_left), pixel_fonts.label.size, 1, text_color_muted)
         draw_text(value.font, cents_str, snap_to_pixels(cents_left + {0, VALUE_Y}), value.size, 0, color)
         if minus do draw_text_right(value.font, "-", cents_left + {-2, VALUE_Y}, value.size, 0, color)
     case .RIGHT:
         hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
-        draw_text_right(label_font, "Hz", hz_right, LABEL_SIZE, 1, text_color_muted)
+        draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
         draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
 
-        draw_text_right(label_font, "Cents", pos, LABEL_SIZE, 1, text_color_muted)
+        draw_text_right(label_font, "Cents", pos, pixel_fonts.label.size, 1, text_color_muted)
         width := draw_text_right(value.font, cents_str, pos + {0, VALUE_Y}, value.size, 0, color)
         // The minus hangs to the left of the number
         if minus do draw_text_right(value.font, "-", pos + {-width - 2, VALUE_Y}, value.size, 0, color)

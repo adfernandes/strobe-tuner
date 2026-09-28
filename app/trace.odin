@@ -94,8 +94,8 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
     center_line.a = 120
     draw_rect({plot.x, middle - 1}, {plot.width, 2}, center_line)
 
-    draw_text(font_store.medium_32, "+25", {plot.x + 10, plot.y - 8}, 16, 1, text_color_muted)
-    draw_text(font_store.medium_32, "-25", {plot.x + 10, plot.y + plot.height - 12}, 16, 1, text_color_muted)
+    draw_label(pixel_fonts.label_large, "+25", {plot.x + 10, plot.y - 8}, text_color_muted, 1)
+    draw_label(pixel_fonts.label_large, "-25", {plot.x + 10, plot.y + plot.height - 12}, text_color_muted, 1)
 
     // Like a lit pen: a soft see-through glow under the line. Both are stamped as anti-aliased dots evenly
     // spaced along the whole line, so the edges and joins are smooth and the glow builds up the same

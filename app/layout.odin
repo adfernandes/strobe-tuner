@@ -154,7 +154,7 @@ SettingsLayout :: struct {
     row_height: f32, // the controls are SETTINGS_CONTROL_MARGIN shorter at the top and bottom
 }
 
-SETTINGS_ICON_SIZE :: 24 // the sliders, right aligned on the main screen
+SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
 SETTINGS_ROW_HEIGHT :: 44 // a finger
 SETTINGS_COMPACT_ROW_HEIGHT :: 36 // a mouse
 SETTINGS_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row

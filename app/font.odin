@@ -18,28 +18,8 @@ package app
 
 import "core:math"
 
-FontStore :: struct {
-    // regular
-    medium_24:      Font,
-    medium_28:      Font,
-    medium_32:      Font,
-    medium_76:      Font,
-    medium_256:     Font,
-
-    // Note: Inter doesn't support the sharp sign ♯
-    noto_medium_96: Font,
-
-    // bold
-    bold_36:        Font,
-
-    // Phosphor icons, see ICON_CODEPOINTS
-    icons_32:       Font,
-    icons_72:       Font, // the larger icons, sharp at 24pt on a 3x screen
-}
-
-font_store: FontStore
-
-FONT_CODEPOINTS :: "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭#/+-1234567890.:π!▶◀×()[]"
+// Missing ones draw as the first, the space too. Inter has no ♯, it comes from Noto.
+FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-1234567890.,:π!×()[]"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
@@ -55,25 +35,19 @@ ICON_X: cstring : ""
 
 ICON_CODEPOINTS :: "\ue432"
 
-init_fonts :: proc() {
-    inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
-    inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
-    noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
-    phosphor := #load("../assets/fonts/phosphor/Phosphor-Icons.ttf")
-
-    font_store.medium_24 = gfx_load_font(inter_medium, 24, FONT_CODEPOINTS)
-    font_store.medium_28 = gfx_load_font(inter_medium, 28, FONT_CODEPOINTS)
-    font_store.medium_32 = gfx_load_font(inter_medium, 32, FONT_CODEPOINTS)
-    font_store.medium_76 = gfx_load_font(inter_medium, 76, FONT_CODEPOINTS)
-    font_store.medium_256 = gfx_load_font(inter_medium, 256, FONT_CODEPOINTS)
-    font_store.bold_36 = gfx_load_font(inter_bold, 36, FONT_CODEPOINTS)
-    font_store.noto_medium_96 = gfx_load_font(noto_sans_mono, 92, FONT_CODEPOINTS)
-    font_store.icons_32 = gfx_load_font(phosphor, 32, ICON_CODEPOINTS)
-    font_store.icons_72 = gfx_load_font(phosphor, 72, ICON_CODEPOINTS)
-}
-
-// The large text is rasterized at exactly the size it's drawn at on this screen, shrinking a larger atlas
-// by that much shows jagged edges. Point sizes, whole pixels at 1x, 2x and 3x.
+// All the text is rasterized at exactly the size it's drawn at on this screen, a scaled atlas is soft or
+// jagged. Point sizes, whole pixels at 1x, 2x and 3x.
+LABEL_SIZE :: 14 // the controls and most of the text
+LABEL_LARGE_SIZE :: 16
+LABEL_SMALL_SIZE :: 12 // the debug stats
+TITLE_SIZE :: 18
+ICON_SIZE :: 16
+ICON_LARGE_SIZE :: 24
+// The note without the ruler
+NOTE_NAME_SIZE :: 128
+NOTE_OCTAVE_SIZE :: 38
+NOTE_SHARP_SIZE :: 48
+// The ruler, scaled by the layout
 RULER_NOTE_SIZE :: 88 // the target note
 RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
@@ -92,7 +66,16 @@ PixelFont :: struct {
 PixelFonts :: struct {
     scale:           f32, // the DPI scale they were loaded for
     ruler_scale:     f32, // the ruler's sizes relative to the desktop, see Layout
-    note:            PixelFont,
+    label:           PixelFont,
+    label_large:     PixelFont,
+    label_small:     PixelFont,
+    title:           PixelFont,
+    icon:            PixelFont,
+    icon_large:      PixelFont,
+    note_name:       PixelFont, // the note without the ruler
+    note_octave:     PixelFont,
+    note_name_sharp: PixelFont,
+    note:            PixelFont, // the ruler's target note
     neighbour:       PixelFont,
     octave:          PixelFont,
     note_sharp:      PixelFont,
@@ -112,7 +95,9 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
     unload_pixel_fonts()
 
     inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
+    inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
     noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
+    phosphor := #load("../assets/fonts/phosphor/Phosphor-Icons.ttf")
     load :: proc(ttf: []u8, points, scale: f32, codepoints: string) -> PixelFont {
         pixels := math.round(points * scale)
         return {gfx_load_font(ttf, i32(pixels), codepoints), pixels / scale}
@@ -121,6 +106,15 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
     pixel_fonts = {
         scale           = scale,
         ruler_scale     = ruler_scale,
+        label           = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
+        label_large     = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
+        label_small     = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
+        title           = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
+        icon            = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
+        icon_large      = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
+        note_name       = load(inter_medium, NOTE_NAME_SIZE, scale, "ABCDEFG"),
+        note_octave     = load(inter_medium, NOTE_OCTAVE_SIZE, scale, "0123456789"),
+        note_name_sharp = load(noto_sans_mono, NOTE_SHARP_SIZE, scale, "♯"),
         note            = load(inter_medium, ruler_scale * RULER_NOTE_SIZE, scale, "ABCDEFG"),
         neighbour       = load(inter_medium, ruler_scale * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
         octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
@@ -134,6 +128,15 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
 
 unload_pixel_fonts :: proc() {
     if pixel_fonts.scale == 0 do return
+    gfx_unload_font(pixel_fonts.label.font)
+    gfx_unload_font(pixel_fonts.label_large.font)
+    gfx_unload_font(pixel_fonts.label_small.font)
+    gfx_unload_font(pixel_fonts.title.font)
+    gfx_unload_font(pixel_fonts.icon.font)
+    gfx_unload_font(pixel_fonts.icon_large.font)
+    gfx_unload_font(pixel_fonts.note_name.font)
+    gfx_unload_font(pixel_fonts.note_octave.font)
+    gfx_unload_font(pixel_fonts.note_name_sharp.font)
     gfx_unload_font(pixel_fonts.note.font)
     gfx_unload_font(pixel_fonts.neighbour.font)
     gfx_unload_font(pixel_fonts.octave.font)
@@ -151,21 +154,17 @@ snap_to_pixels :: proc(p: [2]f32) -> [2]f32 {
     return {math.round(p.x * scale), math.round(p.y * scale)} / scale
 }
 
-// Icon with its top left at position, 16pt unless told otherwise
-draw_icon :: proc(icon: cstring, position: [2]f32, color: Color, size: f32 = 16) {
-    font := font_store.icons_72 if size > 16 else font_store.icons_32
-    draw_text(font, icon, position, size, 0, color)
+// Icon with its top left at position, ICON_SIZE or ICON_LARGE_SIZE
+draw_icon :: proc(icon: cstring, position: [2]f32, color: Color, large := false) {
+    font := pixel_fonts.icon_large if large else pixel_fonts.icon
+    draw_text(font.font, icon, snap_to_pixels(position), font.size, 0, color)
 }
 
-destroy_fonts :: proc() {
-    gfx_unload_font(font_store.medium_24)
-    gfx_unload_font(font_store.medium_28)
-    gfx_unload_font(font_store.medium_32)
-    gfx_unload_font(font_store.medium_76)
-    gfx_unload_font(font_store.medium_256)
-    gfx_unload_font(font_store.bold_36)
-    gfx_unload_font(font_store.noto_medium_96)
-    gfx_unload_font(font_store.icons_32)
-    gfx_unload_font(font_store.icons_72)
-    unload_pixel_fonts()
+// Text in a pixel font, snapped to whole pixels
+draw_label :: proc(font: PixelFont, text: cstring, position: [2]f32, color: Color, spacing: f32 = 0) {
+    draw_text(font.font, text, snap_to_pixels(position), font.size, spacing, color)
+}
+
+measure_label :: proc(font: PixelFont, text: cstring, spacing: f32 = 0) -> [2]f32 {
+    return measure_text(font.font, text, font.size, spacing)
 }
