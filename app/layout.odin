@@ -43,7 +43,8 @@ DESKTOP_HEIGHT :: 564 // the window, as wide as the strobe
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 
 RULER_HEIGHT :: 110
-// A phone has the room for larger notes, and they're read from further away than a desktop screen
+// A phone has the room for larger notes and readout values, and they're read from further away than a
+// desktop screen
 PORTRAIT_RULER_SCALE :: 1.3
 // Above the ruler and centred, without it right aligned with the values on the baseline of the note letter
 READOUT_WIDTH :: HZ_COLUMN_OFFSET + 75 // enough for "4186.0"
@@ -109,7 +110,7 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
         // Offsets from the middle of the ruler.
         l.ruler_scale = ruler_scale
         note_size := ruler_scale * RULER_NOTE_SIZE
-        readout_top := -note_size / 2 - READOUT_RULER_GAP - READOUT_HEIGHT
+        readout_top := -note_size / 2 - READOUT_RULER_GAP - ruler_scale * READOUT_HEIGHT
         lock_y := note_size / 2 + 28
         middle := (panel + bottom) / 2 - (readout_top + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
 
@@ -137,8 +138,10 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
     l.lock = {l.note.x + (NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET) / 2, lock_y}
 }
 
-// The settings screen, a column of rows inside the safe area, the same on desktop and phone
+// The settings, a sheet up from the bottom as tall as its rows, the strobe above it stays in sight to
+// show the changes. The same on desktop and phone.
 SettingsLayout :: struct {
+    sheet: Rect, // runs to the bottom of the window
     title: [2]f32,
     close: Rect, // touch area of the ✕
     rows:  [2]f32, // top left of the first row
@@ -146,16 +149,25 @@ SettingsLayout :: struct {
 }
 
 SETTINGS_ICON_SIZE :: 24 // the sliders, right aligned on the main screen
-SETTINGS_ROW_HEIGHT :: 52
+SETTINGS_ROW_HEIGHT :: 44
 SETTINGS_CONTROL_HEIGHT :: 32 // the pills, their touch area is the whole row height
+SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 
-compute_settings_layout :: proc(safe: Rect) -> (l: SettingsLayout) {
+// open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way
+compute_settings_layout :: proc(window: [2]f32, safe: Rect, open: f32) -> (l: SettingsLayout) {
     left := safe.x + PANEL_PADDING
-    top := safe.y + PANEL_PADDING
     l.width = safe.width - 2 * PANEL_PADDING
+
+    // Below the rows, the home indicator on a phone
+    below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
+    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + SETTINGS_ROWS * SETTINGS_ROW_HEIGHT + below
+    height = min(height, window.y - safe.y)
+    l.sheet = {0, window.y - open * height, window.x, height}
+
+    top := l.sheet.y + PANEL_PADDING
     l.title = {left, top}
     // Right aligned with the rows, centred on the title
     l.close = {left + l.width - 32, top - 11, 48, 48}
-    l.rows = {left, top + 32}
+    l.rows = {left, top + SETTINGS_TITLE_HEIGHT}
     return
 }

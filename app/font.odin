@@ -39,7 +39,7 @@ FontStore :: struct {
 
 font_store: FontStore
 
-FONT_CODEPOINTS :: "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶◀×()[]"
+FONT_CODEPOINTS :: "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭#/+-1234567890.:π!▶◀×()[]"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
@@ -79,7 +79,7 @@ RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
 RULER_NOTE_SHARP_SIZE :: 48
 RULER_NEIGHBOUR_SHARP_SIZE :: 28
-READOUT_SIZE :: 24 // the Hz and cents values
+READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
 NOTE_ARROW_SIZE :: 26 // either side of the note without the ruler
 STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune
 
@@ -126,7 +126,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
         note_sharp      = load(noto_sans_mono, ruler_scale * RULER_NOTE_SHARP_SIZE, scale, "♯"),
         neighbour_sharp = load(noto_sans_mono, ruler_scale * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
-        readout         = load(inter_medium, READOUT_SIZE, scale, "0123456789.-"),
+        readout         = load(inter_medium, ruler_scale * READOUT_SIZE, scale, "0123456789.-"),
         note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
     }

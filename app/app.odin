@@ -155,6 +155,7 @@ run_app :: proc(config: ^Config) {
     audio_device_dropdown_active := false
 
     settings_open := false
+    settings_slide: f32 = 0 // how far the sheet is up, it follows settings_open
 
     // A locked target keeps its note name, the octave still follows the detected note
     note_locked := false
@@ -336,23 +337,12 @@ run_app :: proc(config: ^Config) {
             core.reset_phase_noise_floor(phase_comparator)
         }
 
-        // The audio keeps running behind the settings screen
-        if settings_open {
-            close, changed := gui_settings(
-                compute_settings_layout(gfx_safe_area()),
-                config,
-                audio_devices[:],
-                &audio_device_dropdown_index,
-                &audio_device_dropdown_active,
-            )
-            if changed do config_changed = true
-            if close {
-                settings_open = false
-                audio_device_dropdown_active = false
-                exclusive_control_mode = false
-            }
-            continue
-        }
+        // The settings sheet slides up over the main screen, which keeps running under it and ignores
+        // taps until the sheet is all the way down again. The sheet is drawn at the end of the frame.
+        settings_was_open := settings_open
+        settings_slide += (f32(int(settings_open)) - settings_slide) * min(1, SETTINGS_SLIDE_SPEED * gfx_frame_time())
+        if abs(f32(int(settings_open)) - settings_slide) < 0.002 do settings_slide = f32(int(settings_open))
+        gui_disabled = settings_open || settings_slide > 0
 
         {
 
@@ -428,9 +418,11 @@ run_app :: proc(config: ^Config) {
                 step = gui_note_arrows(layout.note, note_locked)
             }
             lock_toggled := gui_lock_toggle(layout.lock, note_locked)
-            if key_pressed(.SPACE) do lock_toggled = true
-            if key_pressed(.LEFT) do step = -1
-            if key_pressed(.RIGHT) do step = 1
+            if !gui_disabled {
+                if key_pressed(.SPACE) do lock_toggled = true
+                if key_pressed(.LEFT) do step = -1
+                if key_pressed(.RIGHT) do step = 1
+            }
 
             prev_target_note := target_note
             if lock_toggled {
@@ -612,5 +604,42 @@ run_app :: proc(config: ^Config) {
                 )
             }
         }
+
+        if settings_slide > 0 {
+            settings_layout := compute_settings_layout(gfx_window_size(), gfx_safe_area(), settings_slide)
+
+            // The strobe looks set into the window above the sheet like above the panel
+            strobe_bottom := layout.strobe.y + layout.strobe.height
+            if config.strobe_display_type != .TRACE && settings_layout.sheet.y < strobe_bottom {
+                draw_strobe_bottom_shadow(&strobe_display, layout.strobe, settings_layout.sheet.y)
+            }
+
+            // Not the tap that opened it, and not while it slides away
+            gui_disabled = !(settings_was_open && settings_open)
+
+            close, changed := gui_settings(
+                settings_layout,
+                config,
+                audio_devices[:],
+                &audio_device_dropdown_index,
+                &audio_device_dropdown_active,
+            )
+            if changed do config_changed = true
+
+            // Tapping the strobe above the sheet closes it too
+            above := settings_layout.sheet
+            above.height = above.y
+            above.y = 0
+            if gui_button(above) do close = true
+
+            if close {
+                settings_open = false
+                audio_device_dropdown_active = false
+                exclusive_control_mode = false
+            }
+        }
     }
 }
+
+// Per second, how quickly the settings sheet closes the distance, like the ruler
+SETTINGS_SLIDE_SPEED :: 14

@@ -330,7 +330,28 @@ draw_strobe_display :: proc(
     draw_texture(
         self.shadow_tex,
         {0, 0, f32(self.shadow_tex.width), f32(self.shadow_tex.height)},
-        {rect.x, rect.y - 20, rect.width, rect.height + 22},
+        shadow_rect(rect),
+    )
+}
+
+// The shadow over the strobe, a little past its top and bottom so only the edges are dark
+@(private = "file")
+shadow_rect :: proc(strobe: Rect) -> Rect {
+    return {strobe.x, strobe.y - 20, strobe.width, strobe.height + 22}
+}
+
+// Just the bottom edge of the shadow, ending at bottom, where something covers the strobe from below
+// like the settings sheet. A narrow column from the middle stretched across, the corners would darken
+// the sides a second time. Scaled vertically the same as the whole shadow.
+draw_strobe_bottom_shadow :: proc(self: ^StrobeDisplay, strobe: Rect, bottom: f32) {
+    EDGE :: 24 // enough for the darkening, the rest of the texture is clear
+    tex := self.shadow_tex
+    full := shadow_rect(strobe)
+    edge := EDGE * f32(tex.height) / full.height
+    draw_texture(
+        tex,
+        {f32(tex.width) / 2 - 1, f32(tex.height) - edge, 2, edge},
+        {full.x, bottom + 2 - EDGE, full.width, EDGE},
     )
 }
 

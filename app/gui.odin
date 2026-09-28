@@ -27,6 +27,9 @@ import "../core"
 // an active dropdown menu should not trigger other GUI controls
 exclusive_control_mode := false
 
+// The controls being drawn don't take input, e.g. the main screen under the settings sheet
+gui_disabled := false
+
 text_color_dark := hex(0x15141BFF)
 text_color_light := hex(0xBDBDBDFF)
 text_color_white := hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
@@ -107,10 +110,11 @@ gui_strobe_partial :: proc(
         text = fmt.ctprintf("%.1fHz", band.freq_hz)
         font_size = 14
     } else if type == .NOTE_NAMES {
+        // Inter has no ♯, a plain # reads fine at this size
         text = fmt.ctprintf(
             "%v%v%v",
             band.note.name,
-            "♯" if band.note.is_accidental else "",
+            "#" if band.note.is_accidental else "",
             band.note.octave,
         )
     } else {
@@ -310,7 +314,7 @@ gui_response_toggle :: proc(pos: [2]f32, speed: f32) -> (f32, bool) {
 
 gui_button :: proc(bounds: Rect) -> bool {
     mouse_point := mouse_position()
-    if point_in_rect(mouse_point, bounds) && !exclusive_control_mode {
+    if point_in_rect(mouse_point, bounds) && !exclusive_control_mode && !gui_disabled {
         if mouse_pressed() {
             return true
         }
@@ -320,7 +324,7 @@ gui_button :: proc(bounds: Rect) -> bool {
 
 // Whether the button is being held down, to draw it in its pressed shade
 gui_button_held :: proc(bounds: Rect) -> bool {
-    return mouse_down() && point_in_rect(mouse_position(), bounds) && !exclusive_control_mode
+    return mouse_down() && point_in_rect(mouse_position(), bounds) && !exclusive_control_mode && !gui_disabled
 }
 
 
@@ -374,7 +378,7 @@ gui_dropdown :: proc(
                 exclusive_control_mode = false
             }
         } else {
-            if !exclusive_control_mode && point_in_rect(mouse_point, btn_bounds) {
+            if !exclusive_control_mode && !gui_disabled && point_in_rect(mouse_point, btn_bounds) {
                 edit_mode = true
                 exclusive_control_mode = true
             }

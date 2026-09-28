@@ -22,7 +22,7 @@ import "core:time"
 
 import "../core"
 
-// The settings screen, opened with the sliders icon just under the strobe on the right.
+// The settings sheet, opened with the sliders icon on the main screen.
 // Everything that isn't needed while tuning lives here, the main screen keeps the note lock
 // and the strobe speed.
 
@@ -30,6 +30,9 @@ PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
 SEGMENT_WIDTH :: 60
+
+// The rows in gui_settings, iOS has no input row
+SETTINGS_ROWS :: 8 when IOS else 9
 
 settings_separator_color := hex(0x35363EFF)
 
@@ -45,6 +48,9 @@ gui_settings :: proc(
     close: bool,
     changed: bool,
 ) {
+    // Over the main screen
+    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(window_bg_color))
+
     draw_text(font_store.bold_36, "Settings", l.title, 18, 1, text_color_white)
 
     // 16pt icon in the middle of a larger touch area
@@ -243,7 +249,7 @@ gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: st
     }
 
     // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps
-    if point_in_rect(mouse_position(), touch_area(rect)) && !exclusive_control_mode {
+    if point_in_rect(mouse_position(), touch_area(rect)) && !exclusive_control_mode && !gui_disabled {
         stepper_scroll += mouse_wheel()
         steps := math.trunc(stepper_scroll)
         stepper_scroll -= steps
