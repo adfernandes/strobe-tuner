@@ -101,7 +101,7 @@ Config :: struct {
     // high-pass filter on the input to remove DC and low frequency rumble, 0 to disable
     highpass_cutoff_hz:           f32,
 
-    // Average 3 DFTs to get more stable phase/mag tracking
+    // Add in the DFT bins 5 cents either side, a slightly detuned note keeps its level, see set_dft_freq
     use_phase_average:            bool,
 
     // Show cents offset for each strobe band

@@ -61,10 +61,6 @@ ONSET_ENVELOPE_TIME_S :: 0.3
 ONSET_HOLD_S :: 0.1 // extra time after the attack reaches the window centre
 ONSET_MIN_MEASUREMENT_VAR :: 0.05 // rad²
 
-// Band noise floor, i.e. the level of the background noise at the band frequency.
-// It follows the level (in dB) while nothing louder is playing, and slowly creeps up during a note,
-// so it can still catch up with a noisier environment.
-
 
 StrobeMode :: enum {
     HARMONIC_MODE, // each track display a harmonic frequency
@@ -152,7 +148,7 @@ init_phase_comparator :: proc(
     self.mode = mode
     self.base_freq_hz = base_freq_hz
 
-    for interval, i in strobe_intervals {
+    for interval in strobe_intervals {
         if interval >= 1.0 {
             band := PhaseBand{}
             band.interval = interval
@@ -180,8 +176,6 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     free(self)
 }
 
-// FIXME: this will only work for the existing strobe bands, it won't add any new ones
-// FIXME: need to call set_phase_comparator_freq after updating the intervals
 // Like init_phase_comparator, a band per interval of 1 or more, the rest are padding. The bands are made
 // once, so it has to be as many as then. Kept in fine mode too, for switching back to harmonic mode.
 // Takes effect with the next set_phase_comparator_freq.

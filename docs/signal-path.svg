@@ -126,7 +126,7 @@
     <text class="sub" x="120" y="102">or audio interface</text>
 
     <text class="label" x="120" y="174">miniaudio</text>
-    <text class="sub" x="120" y="194">CoreAudio, mono f32</text>
+    <text class="sub" x="120" y="194">system audio, mono f32</text>
     <text class="sub" x="120" y="210">resamples to 48 kHz</text>
 
     <text class="label" x="120" y="270">High-pass filter</text>
@@ -159,7 +159,7 @@
     <!-- Strobe lane -->
     <text class="label" x="351" y="301">Sample window</text>
     <text class="sub" x="351" y="321">per band, 25 cents</text>
-    <text class="sub" x="351" y="337">7.3k at 110 Hz</text>
+    <text class="sub" x="351" y="337">30k at 110 Hz</text>
 
     <text class="label" x="523" y="301">Single-bin DFT</text>
     <text class="sub" x="523" y="321">Blackman window</text>

@@ -81,7 +81,7 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
     delete(self.samples)
 }
 
-// TODO: keep track of previous pitches
+// Takes the previous detection to repeat when there are no new samples, the Tuner keeps the history
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
 

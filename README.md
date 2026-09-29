@@ -4,7 +4,7 @@
 
 A simple stroboscopic instrument tuner.
 
-<img src="screenshots/Screenshot 2025-06-28 at 18.48.25.png" width="300" height="336" class="shrinkToFit transparent">
+https://github.com/user-attachments/assets/be6bc3a4-fe84-44a8-903c-1824b87a64d4
 
 </div>
 
@@ -22,14 +22,6 @@ A simple stroboscopic instrument tuner.
 - Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
 - Strobe response toggle (calm / precision): how fast the strobe spins per cent of detuning.
 - Hertz/Cents display.
-
-
-
-### Keyboard shortcuts
-- <kbd>space</kbd> &nbsp; lock or unlock the note.
-- <kbd>←</kbd><kbd>→</kbd> &nbsp;  lock the note and move it down or up by a semitone.
-- <kbd>tab</kbd> &nbsp;  switch the strobe display type to a full wheel.
-- <kbd>G</kbd> &nbsp;  cycle the lamp glow on the strobe: amber, red, off.
 
 
 
@@ -158,7 +150,7 @@ In automatic mode a newly detected note has to be seen several times in a row (3
 
 #### Noise floor
 
-Each band keeps an estimate of the background noise at its frequency (i.e. the noise floor), which gives the SNR used by the phase tracker and the display. It follows the band level in dB while nothing louder is playing and pauses when the SNR is above a threshold, only creeping up slowly so it can catch up with a noisier environment. It's relearned when switching the input device.
+Each strobe band keeps an estimate of the background noise at its frequency (i.e. the noise floor), which gives the SNR used by the phase tracker and the display. The pitch detector keeps one the same way for the level of the whole signal, its SNR is part of telling a strong pitch from a weak one. It follows the level in dB while nothing louder is playing and pauses when the SNR is above a threshold, only creeping up slowly so it can catch up with a noisier environment. It's relearned when switching the input device and when the input is opened again, e.g. after the app was in the background.
 
 
 
