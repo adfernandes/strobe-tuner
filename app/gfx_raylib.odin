@@ -74,6 +74,21 @@ when RENDERER == "raylib" {
         return rl.WindowShouldClose()
     }
 
+    // Only iOS sends the app to the background
+    gfx_in_background :: proc() -> bool {
+        return false
+    }
+
+    gfx_wait_for_foreground :: proc() {}
+
+    gfx_open_url :: proc(url: cstring) {
+        rl.OpenURL(url)
+    }
+
+    gfx_limit_fps :: proc(fps: int) {
+        rl.SetTargetFPS(i32(fps if fps > 0 else 120))
+    }
+
     gfx_begin_frame :: proc(clear: Color) {
         rl.BeginDrawing()
         rl.ClearBackground(rl.Color(clear))
@@ -340,9 +355,5 @@ when RENDERER == "raylib" {
     draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {
         size := render_target_size(target)
         draw_texture(target.texture, {0, 0, size.x, -size.y}, dest, tint)
-    }
-
-    color_picker :: proc(rect: Rect, color: ^Color) {
-        rl.GuiColorPicker(transmute(rl.Rectangle)rect, nil, (^rl.Color)(color))
     }
 }

@@ -75,9 +75,6 @@ Config :: struct {
     // How to render the strobe effect
     strobe_display_type:          StrobeDisplayType,
 
-    // color scheme for strobe track display, two hex values
-    strobe_color_1:               u32 "color",
-    strobe_color_2:               u32 "color",
     strobe_colorway:              StrobeColorway,
     strobe_blur:                  bool,
     // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
@@ -97,7 +94,6 @@ Config :: struct {
     pitch_detection_clarity_high: f32,
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
-    rms_quiet_threshold:          f32,
 
     // number of consecutive pitch detections of a new note before the strobe switches to it
     note_switch_confirmations:    int,
@@ -129,19 +125,12 @@ config_defaults :: Config {
     motion_blur                  = true,
     strobe_glow                  = true,
     prevent_strobe_octave_jumps  = true,
-
-    // Custom colors
-    strobe_color_1               = 0x0,
-    strobe_color_2               = 0x0,
-
-    //
     partial_labels               = .MULTIPLES,
     chromatic_ruler              = true,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 2, // dB
-    rms_quiet_threshold          = 0.01, // -40dBFS
     note_switch_confirmations    = 3, // ~150ms at 20 detections per second, the last one must be strong
     highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower it for bass
     use_phase_average            = true,
@@ -182,15 +171,7 @@ load_config :: proc() -> Config {
                 ptr_f32^ = value
             }
         case reflect.Type_Info_Integer:
-            str := section[field.name]
-            value: int
-            ok: bool
-            // Colors are hex, older configs were saved with an uppercase 0X prefix that parse_int rejects
-            if field.tag == "color" && (strings.has_prefix(str, "0x") || strings.has_prefix(str, "0X")) {
-                value, ok = strconv.parse_int(str[2:], 16)
-            } else {
-                value, ok = strconv.parse_int(str)
-            }
+            value, ok := strconv.parse_int(section[field.name])
             if ok {
                 write_int_field(ptr, field.type.size, value)
             }
@@ -251,11 +232,7 @@ save_config :: proc(config: Config) {
     for field in fields {
         value := reflect.struct_field_value(config, field)
         key := strings.clone(field.name)
-        if field.tag == "color" {
-            section[key] = fmt.aprintf("%#x", value)
-        } else {
-            section[key] = fmt.aprintf("%v", value)
-        }
+        section[key] = fmt.aprintf("%v", value)
     }
 
     ini_map[""] = section

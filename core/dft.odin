@@ -16,63 +16,102 @@
 
 package core
 
-import "core:fmt"
 import "core:math"
+import "core:testing"
 
 
 SingleFreqDFT :: struct {
     window_size: int,
     norm_freq:   f32, // normalized frequency, eg 440Hz/ 48,000Hz
-    twiddles:    []complex64, // precomputed twiddle lookup (windowed)
+    twiddles:    []complex64, // precomputed windowed twiddles, one per sample of the window
     dft:         complex64, // stores the resulting DFT after calling run_single_dft
 }
 
 
-init_dft :: proc(max_size: int) -> SingleFreqDFT {
-    self := SingleFreqDFT{}
-    self.twiddles = make([]complex64, max_size)
-    return self
-}
-
-set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int) {
-    assert(window_size <= len(self.twiddles))
-
+// Tune to norm_freq over window_size samples, the twiddles are reallocated when the size changes.
+//
+// With spread_cents the bins that far below and above are added in, which flattens the top of the peak
+// ("phase average"): a slightly detuned note keeps its level and the in tune phase is the same. The sum of
+// the three DFTs is the DFT with the sum of their twiddles, so it costs no more than one.
+set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int, spread_cents: f32 = 0) {
+    if len(self.twiddles) != window_size {
+        delete(self.twiddles)
+        self.twiddles = make([]complex64, window_size)
+    }
     self.window_size = window_size
     self.norm_freq = norm_freq
-    w := math.TAU * norm_freq
 
-    rot_step := complex(math.cos(w), -math.sin(w))
-    phase: complex64 = complex(1.0, 0.0)
+    // exp(-j*w*i), rotated one step at a time. In f64, a long window runs to a couple hundred thousand
+    // steps and the f32 rounding adds up.
+    w := math.TAU * f64(norm_freq)
+    step := complex(math.cos(w), -math.sin(w))
+    rotation := complex128(1)
 
-    // Recalculate windowed twiddles for fast lookup
-    for i in 0 ..< self.window_size {
-        // exp(-j*2π*k*i/N)
+    // The neighbouring bins relative to the centre one
+    ratio := math.pow(2, f64(spread_cents) / 1200)
+    below_step := complex(math.cos(w / ratio - w), -math.sin(w / ratio - w))
+    above_step := complex(math.cos(w * ratio - w), -math.sin(w * ratio - w))
+    below := complex128(1)
+    above := complex128(1)
 
-        // This can further be optimized with incremental Blackman logic to
-        //  save on cos/sin calls.
-        blackmann := blackmann_window(f32(i), f32(window_size))
+    for i in 0 ..< window_size {
+        twiddle := rotation
+        if spread_cents != 0 do twiddle *= 1 + below + above
 
-        self.twiddles[i] = complex(blackmann, 0.0) * phase
-        phase *= rot_step
+        window := f64(blackmann_window(f32(i), f32(window_size)))
+        self.twiddles[i] = complex64(complex(window, 0) * twiddle)
 
+        rotation *= step
+        below *= below_step
+        above *= above_step
     }
 }
 
-destory_dft :: proc(self: ^SingleFreqDFT) {
+destroy_dft :: proc(self: ^SingleFreqDFT) {
     delete(self.twiddles)
 }
 
-// Compute full DFT once
+// TODO: the cost is the window length times the display rate, e.g. an ~80k sample window for a bass low E
+// at 120 FPS. Could run at a fixed rate below the display's, or decimate the input for the low notes.
 run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     assert(len(samples) >= self.window_size)
 
-    self.dft = complex(0, 0)
-
-    for i in 0 ..< self.window_size {
-        self.dft += complex(samples[i], 0) * self.twiddles[i]
+    // The samples are real, two multiplies each instead of a full complex multiply
+    re, im: f32
+    for twiddle, i in self.twiddles {
+        re += samples[i] * real(twiddle)
+        im += samples[i] * imag(twiddle)
     }
 
-    self.dft /= complex(f32(self.window_size), 0.0)
-
+    n := f32(self.window_size)
+    self.dft = complex(re / n, im / n)
     return self.dft
+}
+
+
+@(test)
+test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
+    SAMPLERATE :: 48_000
+    WINDOW :: 7339
+    freq: f32 = 110
+
+    samples := make([]f32, WINDOW)
+    defer delete(samples)
+    for &s, i in samples do s = math.sin(math.TAU * 111 * f32(i) / SAMPLERATE)
+
+    averaged: SingleFreqDFT
+    defer destroy_dft(&averaged)
+    set_dft_freq(&averaged, freq / SAMPLERATE, WINDOW, 5)
+
+    // The three bins on their own
+    sum: complex64
+    for cents in ([]f32{-5, 0, 5}) {
+        bin: SingleFreqDFT
+        defer destroy_dft(&bin)
+        set_dft_freq(&bin, cents_to_freq(cents, freq) / SAMPLERATE, WINDOW)
+        sum += run_single_dft(&bin, samples)
+    }
+
+    got := run_single_dft(&averaged, samples)
+    testing.expectf(t, abs(got - sum) < 1e-4 * abs(sum), "got %v, the three bins add up to %v", got, sum)
 }

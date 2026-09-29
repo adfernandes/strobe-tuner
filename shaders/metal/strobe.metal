@@ -166,6 +166,11 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
     // Color the pixel at position based on whether it sits in the donut shape
     float curved_track = draw_curved_track(thickness, u.curvature_radius, feathering, distance);
 
+    // Most of the quad is outside the arc, skip the signal there, it's the costly part with the motion blur
+    if (curved_track <= 0.0) {
+        return float4(0.0);
+    }
+
     // Current pixel angle
     float angle = atan2(distance.y, distance.x);
 

@@ -20,7 +20,6 @@ StrobeColorway :: enum {
     VIBRANT_RED,
     MINTY,
     AMBER,
-    CUSTOM,
 }
 
 
@@ -48,8 +47,6 @@ get_glow_params :: proc(config: ^Config) -> GlowParams {
         return {color = 0x7DF2C4FF, dark_color = minty[1], exposure = 3.0, saturation = 1.0}
     case .AMBER:
         return {color = 0xFF803CFF, dark_color = 0xFF803CFF, exposure = 4.5, saturation = 0.8}
-    case .CUSTOM:
-        return {color = config.strobe_color_1, dark_color = config.strobe_color_2, exposure = 3.5, saturation = 1.0}
     }
     return {}
 }
@@ -62,8 +59,6 @@ get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
         return minty
     case .AMBER:
         return amber
-    case .CUSTOM:
-        return {config.strobe_color_1, config.strobe_color_2}
     }
     return vibrant_red
 }

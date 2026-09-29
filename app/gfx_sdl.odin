@@ -160,6 +160,8 @@ when RENDERER == "sdl" {
 
         // input
         quit:             bool,
+        background:       bool, // set by watch_app_events
+        max_fps:          int, // see gfx_limit_fps
         keys_pressed:     bit_set[Key],
         mouse_clicked:    bool,
         wheel:            f32,
@@ -176,6 +178,9 @@ when RENDERER == "sdl" {
         // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
         // desktop sizes, and keeps rotating the phone away from portrait
         when IOS do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
+
+        // The app may be suspended before the queued events are polled
+        when IOS do _ = sdl.AddEventWatch(watch_app_events, nil)
 
         gpu.window = sdl.CreateWindow(title, width, height, {.HIGH_PIXEL_DENSITY})
         if gpu.window == nil {
@@ -293,6 +298,37 @@ when RENDERER == "sdl" {
         return gpu.quit
     }
 
+    gfx_in_background :: proc() -> bool {
+        return gpu.background
+    }
+
+    // Blocks until the app is back in front, or quit
+    gfx_wait_for_foreground :: proc() {
+        event: sdl.Event
+        for gpu.background && !gpu.quit {
+            if sdl.WaitEvent(&event) && event.type == .QUIT do gpu.quit = true
+        }
+        // Not a frame that took as long as the app was away
+        gpu.last_counter = sdl.GetPerformanceCounter()
+    }
+
+    gfx_open_url :: proc(url: cstring) {
+        if !sdl.OpenURL(url) do fmt.eprintln("SDL_OpenURL failed:", sdl.GetError())
+    }
+
+    @(private = "file")
+    watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
+        // Not WILL_ENTER_BACKGROUND, it comes for anything that makes the app inactive, like the Control
+        // Center or the microphone permission alert, and it may keep drawing then
+        #partial switch event.type {
+        case .DID_ENTER_BACKGROUND:
+            gpu.background = true
+        case .WILL_ENTER_FOREGROUND:
+            gpu.background = false
+        }
+        return true
+    }
+
     gfx_begin_frame :: proc(clear: Color) {
         clear_dynamic_array(&gpu.vertices)
         clear_dynamic_array(&gpu.commands)
@@ -402,6 +438,18 @@ when RENDERER == "sdl" {
         }
 
         _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+
+        // The rest of the frame at the limited rate, counted from the start of the frame in gfx_should_close
+        if gpu.max_fps > 0 {
+            elapsed := f64(sdl.GetPerformanceCounter() - gpu.last_counter) / f64(sdl.GetPerformanceFrequency())
+            remaining := 1 / f64(gpu.max_fps) - elapsed
+            if remaining > 0 do sdl.DelayPrecise(u64(remaining * 1e9))
+        }
+    }
+
+    // 0 for the display's rate, the swapchain waits for vsync
+    gfx_limit_fps :: proc(fps: int) {
+        gpu.max_fps = fps
     }
 
     gfx_frame_time :: proc() -> f32 {
@@ -746,8 +794,6 @@ when RENDERER == "sdl" {
         size := render_target_size(target)
         draw_texture(target.texture, {0, 0, size.x, size.y}, dest, tint)
     }
-
-    color_picker :: proc(rect: Rect, color: ^Color) {}
 
 
     @(private = "file")

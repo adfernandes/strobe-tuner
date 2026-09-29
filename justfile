@@ -6,7 +6,7 @@ default:
 install-deps:
     #!/usr/bin/env sh
     cd external
-    git clone https://github.com/jockus/odin-portaudio/
+    # only for its ring buffer
     git clone https://github.com/PortAudio/portaudio/
     git clone https://github.com/dsego/odin-pa_ringbuffer/
     git clone https://github.com/dsego/odin-pffft
@@ -25,15 +25,6 @@ build-pa_ringbuffer:
     clang pa_ringbuffer.c pa_ringbuffer.h -c -O2 -Os -fPIC
     ar rcs pa_ringbuffer.a pa_ringbuffer.o
     cp pa_ringbuffer.a ../../../odin-pa_ringbuffer/
-
-build-portaudio:
-    #!/usr/bin/env sh
-    cd external/portaudio
-    mkdir build
-    cd build
-    cmake ..
-    cmake --build . --config Release
-    cp libportaudio.a ../../../
 
 # just dev [target]
 #   (none) raylib renderer

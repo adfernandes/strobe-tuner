@@ -111,13 +111,10 @@ gui_settings :: proc(
     }
 
     {
-        // Custom colors are set in the config file, no segment is selected then
         labels := []cstring{"Red", "Mint", "Amber"}
-        selected := -1 if config.strobe_colorway == .CUSTOM else int(config.strobe_colorway)
-
         rect := settings_row(l, row, "Colors", 3 * SEGMENT_WIDTH)
         row += 1
-        if i, ok := gui_segmented(rect, labels, selected); ok {
+        if i, ok := gui_segmented(rect, labels, int(config.strobe_colorway)); ok {
             config.strobe_colorway = StrobeColorway(i)
             changed = true
         }

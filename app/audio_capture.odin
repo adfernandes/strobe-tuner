@@ -16,6 +16,7 @@
 
 package app
 
+import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:slice"
@@ -40,6 +41,10 @@ AudioCapture :: struct {
     highpass_cutoff_hz: f32,
     highpass:           core.Biquad,
     filtered:           []f32, // high-passed copy of the input, shared by all nodes
+
+    // Set from miniaudio's thread when an iOS audio interruption (a call, Siri, an alarm) is over.
+    // miniaudio stops the device when one begins but doesn't start it again.
+    interruption_ended: bool,
 }
 
 audio_device_count :: proc(self: ^AudioCapture) -> i32 {
@@ -78,7 +83,12 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
     config.performanceProfile = .low_latency
     config.noFixedSizedCallback = true // callback chunks are handled in stream_callback
     config.dataCallback = stream_callback
+    config.notificationCallback = notification_callback
     config.pUserData = self
+
+    // The system deactivates the session for an interruption, miniaudio only activates it once in
+    // context_init. It also leaves the mode at the default, with the system's input processing.
+    when IOS do activate_audio_session()
 
     // Ask the OS for an unprocessed signal (no AGC / noise suppression)
     config.aaudio.inputPreset = .unprocessed
@@ -144,6 +154,18 @@ start_audio_capture :: proc(self: ^AudioCapture) -> bool {
     return true
 }
 
+stop_audio_capture :: proc(self: ^AudioCapture) {
+    if !self.device_open do return
+    if check(ma.device_stop(&self.device)) do return
+
+    fmt.println("Stopped input stream")
+}
+
+// Whether an interruption ended since the last call, then the device has to be opened again
+audio_interruption_ended :: proc(self: ^AudioCapture) -> bool {
+    return intrinsics.atomic_exchange(&self.interruption_ended, false)
+}
+
 register_audio_node :: proc(self: ^AudioCapture, node: ^core.AudioCaptureNode) {
     append(&self.nodes, node)
 }
@@ -191,6 +213,53 @@ stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_co
             if node.stream_callback != nil {
                 node.stream_callback(node, chunk)
             }
+        }
+    }
+}
+
+@(private)
+notification_callback :: proc "c" (notification: ^ma.device_notification) {
+    if notification.type == .interruption_ended {
+        self := cast(^AudioCapture)notification.pDevice.pUserData
+        intrinsics.atomic_store(&self.interruption_ended, true)
+    }
+}
+
+
+// iOS gives a denied microphone a silent input, nothing fails
+microphone_denied :: proc() -> bool {
+    when IOS {
+        // AVAudioSessionRecordPermissionDenied, 'deny'
+        DENIED :: 0x64656e79
+        session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
+        return intrinsics.objc_send(uint, session, "recordPermission") == DENIED
+    } else {
+        return false
+    }
+}
+
+when IOS {
+    @(objc_class = "AVAudioSession")
+    AVAudioSession :: struct {
+        using _: intrinsics.objc_object,
+    }
+
+    foreign import av_foundation "system:AVFoundation.framework"
+
+    @(private)
+    foreign av_foundation {
+        // NSString, the mode with the least input processing, no automatic gain or equalization
+        AVAudioSessionModeMeasurement: rawptr
+    }
+
+    @(private)
+    activate_audio_session :: proc() {
+        session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
+        if !intrinsics.objc_send(bool, session, "setMode:error:", AVAudioSessionModeMeasurement, rawptr(nil)) {
+            fmt.println("Couldn't set the audio session to the measurement mode")
+        }
+        if !intrinsics.objc_send(bool, session, "setActive:error:", bool(true), rawptr(nil)) {
+            fmt.println("Couldn't activate the audio session")
         }
     }
 }

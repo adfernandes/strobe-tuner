@@ -40,7 +40,8 @@ import "core:testing"
 
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 8
-MAX_WINDOW_SIZE :: 262_144
+MAX_WINDOW_SIZE :: 262_144 // the sample buffer, the window for the lowest note fits in it
+PHASE_AVERAGE_SPREAD_CENTS :: 5
 
 // The strobe phase of each band is rescaled to this frequency so that every note spins at the same
 // rate per cent of detuning. Matches the speed of the previous hop-based phase difference at 120 FPS.
@@ -63,9 +64,6 @@ ONSET_MIN_MEASUREMENT_VAR :: 0.05 // rad²
 // Band noise floor, i.e. the level of the background noise at the band frequency.
 // It follows the level (in dB) while nothing louder is playing, and slowly creeps up during a note,
 // so it can still catch up with a noisier environment.
-NOISE_FLOOR_TIME_S :: 0.5
-NOISE_FLOOR_RISE_DB_PER_S :: 1.0
-NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known yet
 
 
 StrobeMode :: enum {
@@ -82,7 +80,7 @@ PhaseBand :: struct {
     freq_diff_hz:                 f32,
     estimated_freq_hz:            f32,
     dft_config:                   SingleFreqDFT,
-    intp_dft_config:              IntpSingleFreqDFT,
+    averaged_dft_config:          SingleFreqDFT, // with PHASE_AVERAGE_SPREAD_CENTS, see set_dft_freq
     time_stretch:                 f32,
     phase:                        f32, // measured lock-in phase, relative to the reference oscillator
     amp:                          f32,
@@ -94,9 +92,7 @@ PhaseBand :: struct {
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     speed:                        f32,
     snr_db:                       f32,
-    noise_floor:                  f32,
-    noise_floor_snr_db_threshold: f32,
-    noise_floor_warmup:           f32, // seconds left of following the level ungated
+    noise_floor:                  NoiseFloor,
 
     // Lock-in reference oscillator frequency, radians per sample
     ref_omega:                    f64,
@@ -160,10 +156,7 @@ init_phase_comparator :: proc(
         if interval >= 1.0 {
             band := PhaseBand{}
             band.interval = interval
-            band.dft_config = init_dft(MAX_WINDOW_SIZE)
-            band.intp_dft_config = init_intp_dft(MAX_WINDOW_SIZE)
-            band.noise_floor_warmup = NOISE_FLOOR_WARMUP_S
-            band.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
+            band.noise_floor = init_noise_floor(noise_floor_snr_db_threshold)
 
             append(&self.bands, band)
         }
@@ -180,8 +173,8 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
     for &band in self.bands {
-        destory_dft(&band.dft_config)
-        destory_intp_dft(&band.intp_dft_config)
+        destroy_dft(&band.dft_config)
+        destroy_dft(&band.averaged_dft_config)
     }
     delete(self.bands)
     free(self)
@@ -189,15 +182,18 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 
 // FIXME: this will only work for the existing strobe bands, it won't add any new ones
 // FIXME: need to call set_phase_comparator_freq after updating the intervals
+// Like init_phase_comparator, a band per interval of 1 or more, the rest are padding. The bands are made
+// once, so it has to be as many as then. Kept in fine mode too, for switching back to harmonic mode.
+// Takes effect with the next set_phase_comparator_freq.
 set_phase_comparator_intervals :: proc(self: ^PhaseComparator, strobe_intervals: []f32) {
-    if self.mode != .HARMONIC_MODE do return
-
-    for interval, i in strobe_intervals {
-        if interval >= 1.0 {
-            band := &self.bands[i]
-            band.interval = interval
-        }
+    band_idx := 0
+    for interval in strobe_intervals {
+        if interval < 1.0 do continue
+        assert(band_idx < len(self.bands), "more strobe intervals than bands")
+        self.bands[band_idx].interval = interval
+        band_idx += 1
     }
+    assert(band_idx == len(self.bands), "fewer strobe intervals than bands")
 }
 
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
@@ -268,7 +264,7 @@ set_phase_comparator_freq :: proc(
         if self.mode == .HARMONIC_MODE || i == 0 {
             window_size := best_dft_window_size(band.freq_hz, self.samplerate, 25)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
-            set_intp_dft_freq(&band.intp_dft_config, window_size, band.freq_hz, self.samplerate, 5)
+            set_dft_freq(&band.averaged_dft_config, band.norm_freq, window_size, PHASE_AVERAGE_SPREAD_CENTS)
         }
     }
 }
@@ -276,8 +272,7 @@ set_phase_comparator_freq :: proc(
 // Relearn the background noise, e.g. after switching the input device
 reset_phase_noise_floor :: proc(self: ^PhaseComparator) {
     for &band in self.bands {
-        band.noise_floor = 0
-        band.noise_floor_warmup = NOISE_FLOOR_WARMUP_S
+        reset_noise_floor(&band.noise_floor)
     }
 }
 
@@ -370,7 +365,7 @@ determine_band_phase :: proc(
 
         dft: complex64
         if use_phase_average {
-            dft = run_intp_dft(&band.intp_dft_config, samples)
+            dft = run_single_dft(&band.averaged_dft_config, samples)
         } else {
             dft = run_single_dft(&band.dft_config, samples)
         }
@@ -419,7 +414,7 @@ determine_band_phase :: proc(
 update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int) {
     band.onset_hold = max(band.onset_hold - self.available, 0)
 
-    is_loud := band.snr_db > band.noise_floor_snr_db_threshold
+    is_loud := band.snr_db > band.noise_floor.snr_threshold_db
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
         // The attack affects the phase until it has passed the window centre
         band.onset_hold = window_size / 2 + int(ONSET_HOLD_S * self.samplerate)
@@ -463,7 +458,7 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 
     // Phase noise variance of a phasor in noise ≈ 1 / (2 SNR)
     EPS :: 1e-12
-    noise_ratio := f64(band.noise_floor) / (f64(band.amp) + EPS)
+    noise_ratio := f64(band.noise_floor.level) / (f64(band.amp) + EPS)
     r := clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
     if band.onset_hold > 0 do r = max(r, ONSET_MIN_MEASUREMENT_VAR)
 
@@ -485,32 +480,10 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
-        // Avoid the noise floor dropping to zero (-120 dB)
-        MIN_FLOOR :: 1e-6
-
-        if band.amp >= MIN_FLOOR {
-            // current SNR
-            EPS :: 1e-8 // to avoid divide by zero
-            band.snr_db = 20.0 * math.log10((band.amp + EPS) / (band.noise_floor + EPS))
-
-            dt := f32(self.available) / self.samplerate
-
-            // The window starts out on the silence the sample buffer is filled with
-            window_full := self.sample_clock >= i64(band.dft_config.window_size)
-            if window_full do band.noise_floor_warmup = max(band.noise_floor_warmup - dt, 0)
-
-            if band.noise_floor == 0 {
-                band.noise_floor = band.amp
-            } else if band.noise_floor_warmup > 0 || band.snr_db < band.noise_floor_snr_db_threshold {
-                // Smooth in dB, the level of the noise in a single bin dips deep now and then
-                alpha := 1.0 - math.exp(-dt / NOISE_FLOOR_TIME_S)
-                band.noise_floor *= math.pow(10, alpha * band.snr_db / 20)
-            } else {
-                // Pause following when signal is loud, based on an SNR threshold, only creep up in case the
-                // background got louder, slow enough that a sustained note barely moves it
-                band.noise_floor *= math.pow(10, NOISE_FLOOR_RISE_DB_PER_S * dt / 20)
-            }
-        }
+        dt := f32(self.available) / self.samplerate
+        // The window starts out on the silence the sample buffer is filled with
+        window_full := self.sample_clock >= i64(band.dft_config.window_size)
+        band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full)
     } else {
         // Fine mode - only the base band needs to calculate the noise floor
         base_band := self.bands[0]
@@ -526,7 +499,7 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
     FRAME :: 400 // samples per display frame at 120 FPS
     target_hz: f32 = 261.63
 
-    run :: proc(target_hz: f32, detune_cents: f32) -> (err_cents: [2]f32, phase_diff: f32) {
+    run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
         pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC_MODE, 10)
         defer destroy_phase_comparator(pc)
@@ -542,23 +515,25 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
                 n += 1
             }
             audio_capture_callback(pc, chunk[:])
-            run_phase_detection(pc, false)
+            run_phase_detection(pc, use_phase_average)
         }
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }
 
-    // In tune: the strobe stands still
-    err, diff := run(target_hz, 0)
-    testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
-    testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
+    for average in ([]bool{false, true}) {
+        // In tune: the strobe stands still
+        err, diff := run(target_hz, 0, average)
+        testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
+        testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
 
-    // Sharp: both bands report the detuning, the strobe phase advances
-    err, diff = run(target_hz, 3)
-    testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
-    testing.expect(t, diff > 0)
+        // Sharp: both bands report the detuning, the strobe phase advances
+        err, diff = run(target_hz, 3, average)
+        testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
+        testing.expect(t, diff > 0)
 
-    // Flat
-    err, diff = run(target_hz, -7)
-    testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
-    testing.expect(t, diff < 0)
+        // Flat
+        err, diff = run(target_hz, -7, average)
+        testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
+        testing.expect(t, diff < 0)
+    }
 }

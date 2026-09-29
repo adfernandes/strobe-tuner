@@ -17,9 +17,7 @@
 package core
 
 
-import "core:fmt"
 import "core:math"
-import "core:time"
 
 
 MIN_DETECT_FREQ :: 27.5
@@ -31,12 +29,9 @@ PitchDetector :: struct {
     samples:                      []f32,
     clarity_high:                 f32,
     clarity_low:                  f32,
-    noise_floor:                  f32,
+    noise_floor:                  NoiseFloor, // of the RMS
     min_snr_db:                   f32,
     snr_db:                       f32,
-    noise_floor_snr_db_threshold: f32,
-    rms_quiet_threshold:          f32,
-    last_quiet_time:              time.Tick,
     pitch_standard:               f32, // A4, detected notes are named against it
 }
 
@@ -65,7 +60,6 @@ init_pitch_detector :: proc(
     clarity_low: f32,
     min_snr_db: f32,
     noise_floor_snr_db_threshold: f32,
-    rms_quiet_threshold: f32,
 ) -> (
     self: PitchDetector,
 ) {
@@ -74,18 +68,11 @@ init_pitch_detector :: proc(
     self.clarity_high = clarity_high
     self.clarity_low = clarity_low
     self.min_snr_db = min_snr_db
-    self.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
-    self.rms_quiet_threshold = rms_quiet_threshold
-    self.last_quiet_time = time.tick_now()
+    self.noise_floor = init_noise_floor(noise_floor_snr_db_threshold)
     self.pitch_standard = 440.0
 
-    reset_noise_floor(&self)
     init_audio_capture_node(&self, "pitch")
     return
-}
-
-reset_noise_floor :: proc(self: ^PitchDetector) {
-    self.noise_floor = 0.01 // initialize to a realistic value to get first SNR
 }
 
 destroy_pitch_detector :: proc(self: ^PitchDetector) {
@@ -93,8 +80,6 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
     destroy_audio_capture_node(self)
     delete(self.samples)
 }
-
-tick: time.Tick
 
 // TODO: keep track of previous pitches
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
@@ -116,9 +101,6 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         return stale
     }
 
-    // d := time.tick_lap_time(&tick)
-    // fmt.println("pitch", time.duration_milliseconds(d), available, self.nsdf.samplerate)
-
     info.measured = true
     info.fresh = true
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
@@ -126,20 +108,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms = math.max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 
-    // current SNR
-    self.snr_db = 20.0 * math.log10(info.rms / self.noise_floor)
+    dt := f32(available) / f32(self.nsdf.samplerate)
+    self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt)
     info.snr_db = self.snr_db
-
-    update_noise_floor(
-        &self.noise_floor,
-        &self.last_quiet_time,
-        info.rms,
-        self.rms_quiet_threshold,
-        self.noise_floor_snr_db_threshold,
-        2000,
-    )
-
-    info.noise_floor = self.noise_floor
+    info.noise_floor = self.noise_floor.level
     info.detected_note = find_note(info.detected_freq, self.pitch_standard)
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
 

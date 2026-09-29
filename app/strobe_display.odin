@@ -305,7 +305,7 @@ draw_strobe_display :: proc(
 
             // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
             // decimal point like the readout, the digits don't shift as the value changes.
-            if config.show_band_cents && band.snr_db > band.noise_floor_snr_db_threshold {
+            if config.show_band_cents && band.snr_db > band.noise_floor.snr_threshold_db {
                 font := pixel_fonts.label_large
                 right := rect.x + 16 + measure_label(font, "-00.0").x
                 text := fmt.ctprintf("%+.1f", band.err_cents)
@@ -406,9 +406,17 @@ draw_strobe_bands :: proc(
     for &band, band_idx in phase_info.bands {
         order := len(phase_info.bands) - 1 - band_idx
 
-        // Down to the bottom of the strobe, the arcs drop towards the sides
+        // Down to where the arc ends, it drops towards the sides. The inner edge meets the sides of the strobe
+        // on a wide arc, a narrow one like the wheel is a whole ring.
         band_y := y + band_height * f32(order)
-        rect := Rect{strobe_rect.x, band_y, strobe_rect.width, strobe_rect.y + strobe_rect.height - band_y}
+        half_width := strobe_rect.width / 2
+        inner_radius := curvature_radius - band_height
+        arc_height := 2 * curvature_radius
+        if inner_radius > half_width {
+            arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
+        }
+        height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
+        rect := Rect{strobe_rect.x, band_y, strobe_rect.width, height}
 
         uniforms.bounding_rect = {rect.x, rect.y, rect.width, rect.height}
 

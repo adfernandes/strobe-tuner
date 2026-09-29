@@ -32,6 +32,9 @@ import "core:math/linalg"
 //   gfx_begin_frame(clear), gfx_end_frame()
 //   gfx_frame_time() -> f32, gfx_dpi_scale() -> f32
 //   gfx_window_size() -> [2]f32, gfx_safe_area() -> Rect   in points
+//   gfx_in_background() -> bool, gfx_wait_for_foreground()  iOS, nothing may be drawn in the background
+//   gfx_open_url(url)
+//   gfx_limit_fps(fps)                  fewer frames while there's nothing to show, 0 for the display's rate
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
 //
@@ -50,8 +53,6 @@ import "core:math/linalg"
 //   RenderTarget, gfx_load_render_target(width, height), gfx_unload_render_target(target)
 //   begin_render_target(target, clear, offset, zoom), end_render_target()
 //   draw_render_target(target, dest, tint), render_target_size(target)
-//
-//   color_picker(rect, &color)          dev tool, raylib only
 
 RENDERER :: #config(RENDERER, "raylib")
 
@@ -138,10 +139,6 @@ BloomUniforms :: struct #align (16) {
 
 hex :: proc "contextless" (value: u32) -> Color {
     return {u8(value >> 24), u8(value >> 16), u8(value >> 8), u8(value)}
-}
-
-to_hex :: proc(color: Color) -> u32 {
-    return u32(color.r) << 24 | u32(color.g) << 16 | u32(color.b) << 8 | u32(color.a)
 }
 
 normalize_color :: proc(color: Color) -> [4]f32 {

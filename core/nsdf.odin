@@ -30,6 +30,7 @@ package core
 import "base:runtime"
 import "core:math"
 import "core:mem"
+import "core:testing"
 
 import pffft "../external/odin-pffft"
 
@@ -51,7 +52,8 @@ NSDFConfig :: struct {
 nsdf_init :: proc(fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
-    self.fft = runtime.make_aligned([]complex64, fft_size, 16)
+    // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_process_samples
+    self.fft = runtime.make_aligned([]complex64, fft_size / 2, 16)
     self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
     self.spectrum = make([]f32, fft_size)
     self.nsdf = make([]f32, fft_size / 2)
@@ -98,7 +100,6 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
 
     // pad samples with zeros to avoid cyclic convolution
     mem.zero_slice(self.padded_samples)
-    mem.zero_slice(self.autocorr)
     copy(self.padded_samples, samples)
 
     // FFT transform
@@ -110,11 +111,16 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
         pffft.Direction.FORWARD,
     )
 
-    // multiply FFT with conjugate
+    // multiply FFT with conjugate, i.e. the power spectrum
     // - conjugation in the frequency domain is equivalent to reversal in the time domain
     // (the difference between cross-correlation and convolution is a time reversal on one of the inputs)
-    for i in 0 ..< len(self.fft) {
-        self.fft[i] = self.fft[i] * conj(self.fft[i])
+    //
+    // pffft packs the two real bins, DC and Nyquist, into the first element as (DC, Nyquist),
+    // each is squared on its own and they stay packed for the inverse transform
+    dc_nyquist := self.fft[0]
+    self.fft[0] = complex(real(dc_nyquist) * real(dc_nyquist), imag(dc_nyquist) * imag(dc_nyquist))
+    for &bin in self.fft[1:] {
+        bin = complex(real(bin) * real(bin) + imag(bin) * imag(bin), 0)
     }
 
     // inverse FFT to produce auto-correlation
@@ -230,4 +236,25 @@ parabolic :: proc(alpha: f32, beta: f32, gamma: f32) -> (f32, f32) {
     location := 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
     magnitude := beta - 0.25 * (alpha - gamma) * location
     return location, magnitude
+}
+
+
+@(test)
+test_autocorrelation :: proc(t: ^testing.T) {
+    FFT_SIZE :: 1024
+    self := nsdf_init(FFT_SIZE, 48_000)
+    defer nsdf_destroy(&self)
+
+    // DC and a tone at the Nyquist frequency of the padded transform go through its packed first bin
+    samples: [FFT_SIZE / 2]f32
+    for &s, i in samples {
+        s = 0.3 + 0.2 * math.sin(f32(i) * 0.37) + (0.1 if i % 2 == 0 else -0.1)
+    }
+    nsdf_process_samples(&self, samples[:])
+
+    for lag in 0 ..< len(samples) {
+        expected: f32
+        for i in 0 ..< len(samples) - lag do expected += samples[i] * samples[i + lag]
+        testing.expectf(t, abs(self.autocorr[lag] - expected) < 1e-3, "lag %v: %v, expected %v", lag, self.autocorr[lag], expected)
+    }
 }

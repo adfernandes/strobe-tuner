@@ -35,7 +35,7 @@ A simple stroboscopic instrument tuner.
 
 ### License
 
-Copyright ©️ 2025 Davorin Šego <br />
+Copyright ©️ 2025–2026 Davorin Šego <br />
 Licensed under the GPL v3  <br />
 https://www.gnu.org/licenses/gpl-3.0.en.html
 
@@ -45,13 +45,9 @@ https://www.gnu.org/licenses/gpl-3.0.en.html
 ### Third-Party Resources
 
 
-- [PortAudio](https://portaudio.com/) <br />
+- [PortAudio](https://portaudio.com/) ring buffer <br />
 Portable Real-Time Audio Library <br />
 Copyright (c) 1999-2011 Ross Bencina, Phil Burk <br />
-
-- [portaudio bindings for odin-lang](https://github.com/jockus/odin-portaudio) <br />
-Copyright (c) 2021, Joakim Hentula <br />
-BSD-2-Clause license <br />
 
 - [PFFFT: a pretty fast FFT.](https://bitbucket.org/jpommier/pffft) <br />
 Copyright (c) 2013  Julien Pommier (pommier@modartt.com) <br />
@@ -68,6 +64,26 @@ SIL Open Font License, Version 1.1 . <br />
 - [Raylib](https://www.raylib.com/) <br />
 Copyright (c) 2013-2025 Ramon Santamaria (@raysan5) <br />
 Zlib license
+
+- [SDL](https://libsdl.org/) <br />
+Copyright (C) 1997-2025 Sam Lantinga <br />
+Zlib license <br />
+
+- [miniaudio](https://miniaud.io/) <br />
+Copyright 2025 David Reid <br />
+Public domain (Unlicense) or MIT No Attribution <br />
+
+- [stb](https://github.com/nothings/stb) <br />
+Copyright (c) 2017 Sean Barrett <br />
+Public domain or MIT license <br />
+
+- [Phosphor Icons](https://phosphoricons.com/) <br />
+Copyright (c) 2023 Phosphor Icons <br />
+MIT license <br />
+
+- [Virgil](https://github.com/excalidraw/virgil), the hand-drawn font in the signal path diagram <br />
+Copyright (c) 2020 Excalidraw <br />
+SIL Open Font License 1.1 <br />
 
 
 
@@ -88,15 +104,26 @@ just install-deps
 
 # Build deps
 just build-pffft
-just build-portaudio
-just build-pa_ringubffer
+just build-pa_ringbuffer
 
 # Compile & run the app code
 just dev
 ```
 
+| Command | What it does |
+| --- | --- |
+| `just dev` | Debug build with the raylib renderer (OpenGL) |
+| `just dev sdl` | Debug build with the SDL3 GPU renderer and Metal shaders, needs `brew install sdl3` |
+| `just dev stats` | Debug build that also shows the signal stats and NSDF plots |
+| `just dev ios` | Builds for the iOS simulator and runs it there, the first run builds the native dependencies into `external/ios-sim` |
+| `just build`, `just build sdl` | Optimized builds with either renderer |
+
+Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
+
 
 ### How it works
+
+<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread high-passes the input into two ring buffers, the main thread reads one for pitch detection and the other for the strobe bands">
 
 #### Pitch detection
 

@@ -170,6 +170,11 @@ void main()
     // Color the pixel at position based on whether it sits in the donut shape
     float curved_track = draw_curved_track(size, thickness, curvature_radius, feathering, distance);
 
+    // Most of the quad is outside the arc, skip the signal there, it's the costly part with the motion blur
+    if (curved_track <= 0.0) {
+        finalColor = vec4(0.0);
+        return;
+    }
 
     // Color in the generated strobe signal
 

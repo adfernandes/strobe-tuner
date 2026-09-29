@@ -38,9 +38,6 @@ INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
 }
 
 
-// Add gui controls to choose strobe colors
-COLOR_CONTROLS :: false
-
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
@@ -60,31 +57,17 @@ retune :: proc(phase_comparator: ^core.PhaseComparator, freq_hz: f32, config: ^C
 run_app :: proc(config: ^Config) {
     target_freq_hz: f32 = config.target_freq_hz
 
-    freq_estimation_active := false
-
-    pitch_info := core.PitchInfo{}
-    last_good_pitch_info := core.PitchInfo{}
-
-    // Note detected by the auto-correlation method
-    // FIXME: assigning a dummy cents value for undefined note
-    detected_note := core.Note {
-        cents = -1,
-    }
-
-    // Target note for tuning via the strobe effect
-    target_note := core.Note{}
-
-    // A newly detected note must be seen several times in a row before the strobe switches to it,
-    // otherwise a single noisy detection of a decaying note resets the strobe.
-    candidate_note := core.Note {
-        cents = -1,
-    }
-    candidate_count := 0
+    tuner := core.init_tuner(
+        target_freq_hz,
+        config.pitch_standard,
+        config.note_switch_confirmations,
+        config.prevent_strobe_octave_jumps,
+    )
 
     // Save target note to config when exiting the app
-    defer config.target_freq_hz = target_note.frequency
+    defer config.target_freq_hz = tuner.target_note.frequency
 
-    if !gfx_init(1200 when DEBUG_STATS else STROBE_WIDTH, 800 if COLOR_CONTROLS else DESKTOP_HEIGHT, APP_NAME) do return
+    if !gfx_init(1200 when DEBUG_STATS else STROBE_WIDTH, DESKTOP_HEIGHT, APP_NAME) do return
     defer gfx_shutdown()
 
     // Loaded each frame for the screen's scale, see update_pixel_fonts
@@ -121,7 +104,6 @@ run_app :: proc(config: ^Config) {
         config.pitch_detection_clarity_low,
         config.pitch_detection_min_snr_db,
         config.noise_floor_snr_db_threshold,
-        config.rms_quiet_threshold,
     )
     defer core.destroy_pitch_detector(&pitch_detector)
     pitch_detector.pitch_standard = config.pitch_standard
@@ -137,8 +119,6 @@ run_app :: proc(config: ^Config) {
     start_audio_capture(audio_capture)
 
     retune(phase_comparator, target_freq_hz, config)
-
-    target_note = core.find_note(target_freq_hz, config.pitch_standard)
 
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
@@ -157,9 +137,6 @@ run_app :: proc(config: ^Config) {
     settings_open := false
     settings_slide: f32 = 0 // how far the sheet is up, it follows settings_open
 
-    // A locked target keeps its note name, the octave still follows the detected note
-    note_locked := false
-
     note_low_state := false
     note_high_state := false
     arrow_pulse_phase: f32 = 0
@@ -168,11 +145,14 @@ run_app :: proc(config: ^Config) {
     defer destroy_trace(&cents_trace)
 
 
-    color1 := hex(config.strobe_color_1)
-    color2 := hex(config.strobe_color_2)
-
     interval_options := INTERVAL_OPTIONS
     config_changed := false
+
+    // Open the input again, after the app was in the background or an interruption stopped it
+    restart_audio := false
+
+    // Seconds with no signal and nobody touching anything, see IDLE_AFTER_S
+    quiet_time: f32 = 0
 
 
     // ---------------------------------------------------------------------------------------------
@@ -187,6 +167,18 @@ run_app :: proc(config: ^Config) {
         // The labels and readouts are formatted into the temp allocator, nothing in it outlives a frame
         defer free_all(context.temp_allocator)
 
+        // iOS suspends the app in the background and may end it there without warning, so the config is
+        // saved on the way out
+        if gfx_in_background() {
+            stop_audio_capture(audio_capture)
+            config.target_freq_hz = tuner.target_note.frequency
+            save_config(config^)
+            gfx_wait_for_foreground()
+            restart_audio = true
+            continue
+        }
+        if audio_interruption_ended(audio_capture) do restart_audio = true
+
         if key_pressed(.R) {
             config_changed = true
             fmt.println("Reset config to defaults")
@@ -197,9 +189,10 @@ run_app :: proc(config: ^Config) {
             config.use_phase_average = !config.use_phase_average
         }
 
+        // Debug builds only, TextEdit can't be started from the Mac App Store sandbox
         super_key_down := key_down(.LEFT_SUPER) || key_down(.RIGHT_SUPER)
         pref_key_combo := super_key_down && key_pressed(.COMMA)
-        if pref_key_combo {
+        if ODIN_DEBUG && pref_key_combo {
             shift_key_down := key_down(.LEFT_SHIFT) || key_down(.RIGHT_SHIFT)
 
             // [Cmd + Shift + ,] - Reload config
@@ -221,84 +214,26 @@ run_app :: proc(config: ^Config) {
         if config_changed {
             // Same notes, retuned to the pitch standard
             pitch_detector.pitch_standard = config.pitch_standard
-            target_note = core.cents_to_note(f32(target_note.cents), config.pitch_standard)
-            if detected_note.cents != -1 {
-                detected_note = core.cents_to_note(f32(detected_note.cents), config.pitch_standard)
-            }
+            core.set_tuner_pitch_standard(&tuner, config.pitch_standard)
+            tuner.confirmations = config.note_switch_confirmations
+            tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
 
             set_strobe_colors(&strobe_display, get_strobe_colors(config))
             core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
-            retune(phase_comparator, target_note.frequency, config)
-            config_changed = false // !!!!
+            retune(phase_comparator, tuner.target_note.frequency, config)
+            config_changed = false
         }
 
 
-        pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
+        pitch_info := core.run_pitch_detection(&pitch_detector, tuner.pitch)
+        if core.update_tuner(&tuner, pitch_info) do retune(phase_comparator, tuner.target_note.frequency, config)
 
-        // Count consecutive detections of the same note, only for new measurements.
-        // Medium clarity detections count too, a short pluck may only be "strong" briefly,
-        // but the switch itself still needs a strong detection (see below).
-        if pitch_info.fresh {
-            if pitch_info.is_weak_pitch {
-                candidate_count = 0
-            } else if candidate_note.cents == pitch_info.detected_note.cents {
-                candidate_count += 1
-            } else {
-                candidate_note = pitch_info.detected_note
-                candidate_count = 1
-            }
-        }
-        note_confirmed := candidate_count >= config.note_switch_confirmations
-
-        // Keep previous measurement if there is no detected note
-        if pitch_info.is_strong_pitch {
-            last_good_pitch_info = pitch_info
-            if note_confirmed && detected_note.cents != pitch_info.detected_note.cents {
-                detected_note = pitch_info.detected_note
-
-                new_target := detected_note
-                if note_locked do new_target = core.nearest_note_named(detected_note, target_note.semitone_index)
-                is_octave := core.octave_apart(target_note, new_target)
-
-                if new_target.cents != target_note.cents {
-                    target_note = new_target
-
-                    // Keep the same strobe target, this is useful for some strings on guitars/basses
-                    // where note rings out as a harmonic.
-                    if config.prevent_strobe_octave_jumps && is_octave && freq_estimation_active {
-                        // DO NOTHING
-                    } else {
-                        retune(phase_comparator, target_note.frequency, config)
-                    }
-                }
-            }
-            freq_estimation_active = true
-        }
-
-        if pitch_info.is_weak_pitch {
-            freq_estimation_active = false
-        }
-
-
-        // TODO: explanation
-        // A locked note is expected to differ from the detected one, the readout measures against it
-        out_of_range := !note_locked && detected_note.cents != target_note.cents
-
-        pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
-
-        shown_pitch_info := pitch_info
-        shown_last_good_pitch_info := last_good_pitch_info
-        if note_locked {
-            shown_pitch_info.err_cents = pitch_cents_err
-            shown_last_good_pitch_info.err_cents = core.cents_deviation(
-                last_good_pitch_info.detected_freq,
-                target_note.frequency,
-            )
-        }
+        out_of_range := core.tuner_out_of_range(&tuner)
+        shown_pitch_info, shown_last_good_pitch_info := core.tuner_readout(&tuner)
 
         // The same cents as the readout, a gap while there's no pitch
         traced_cents := math.nan_f32()
-        if freq_estimation_active && !out_of_range do traced_cents = shown_pitch_info.err_cents
+        if tuner.active && !out_of_range do traced_cents = shown_pitch_info.err_cents
         record_trace(&cents_trace, traced_cents, pitch_info.fresh, gfx_frame_time())
 
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
@@ -318,21 +253,22 @@ run_app :: proc(config: ^Config) {
             if config.strobe_intervals_index >= len(interval_options) do config.strobe_intervals_index = 0
             config.strobe_intervals = interval_options[config.strobe_intervals_index]
             core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
-            retune(phase_comparator, target_note.frequency, config)
+            retune(phase_comparator, tuner.target_note.frequency, config)
         }
 
-        layout := compute_layout(gfx_window_size(), gfx_safe_area(), config.chromatic_ruler)
+        layout :=compute_layout(gfx_window_size(), gfx_safe_area(), config.chromatic_ruler)
         update_pixel_fonts(layout.ruler_scale)
 
         // Draw the GUI controls
         gfx_begin_frame(hex(window_bg_color))
         defer gfx_end_frame()
 
-        // Choose new audio input
-        if audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
+        // Choose new audio input, or reopen the same one
+        if restart_audio || audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
+            restart_audio = false
             switch_audio_device(audio_capture, audio_devices[audio_device_dropdown_index].id)
             core.flush_audio_capture_ringbuffer(&pitch_detector)
-            core.reset_noise_floor(&pitch_detector)
+            core.reset_noise_floor(&pitch_detector.noise_floor)
             core.flush_audio_capture_ringbuffer(phase_comparator)
             core.reset_phase_noise_floor(phase_comparator)
         }
@@ -368,19 +304,32 @@ run_app :: proc(config: ^Config) {
                 )
             }
 
+            // A denied microphone only gives silence and the strobe would just stand still, say why instead
+            if microphone_denied() {
+                draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe.height}, hex(strobe_bg_color))
+                center := [2]f32{layout.strobe.x + layout.strobe.width / 2, layout.strobe.y + layout.strobe.height / 2}
+                title: cstring = "Microphone access is off"
+                hint: cstring = "Tap to allow it in Settings"
+                title_size := measure_label(pixel_fonts.title, title)
+                hint_size := measure_label(pixel_fonts.label, hint)
+                draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
+                draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
+                if gui_button(layout.strobe) do gfx_open_url("app-settings:")
+            }
+
             // Only the strong readings, a fading note drifts and would flash the arrows
-            arrow_cents_err := core.cents_deviation(last_good_pitch_info.detected_freq, target_note.frequency)
+            arrow_cents_err := core.cents_deviation(tuner.last_good_pitch.detected_freq, tuner.target_note.frequency)
             distance := abs(arrow_cents_err)
 
             // Without a lock, further than half a semitone is a neighbouring note that isn't confirmed yet
-            if freq_estimation_active && (note_locked || distance <= 50) {
+            if tuner.active && (tuner.locked || distance <= 50) {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, arrow_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, arrow_cents_err, 8, 10)
 
                 // Far from a locked note the strobe means nothing, the arrow pulses instead: slowly an octave
                 // or more away, quicker as the string comes closer, steady within 50 cents
                 arrow_color := hex(0x82E2FFFF)
-                if note_locked && distance > 50 {
+                if tuner.locked && distance > 50 {
                     closeness := clamp((1200 - distance) / (1200 - 50), 0, 1)
                     pulse_hz := math.lerp(f32(0.5), 2.5, closeness)
                     arrow_pulse_phase = math.mod(arrow_pulse_phase + pulse_hz * gfx_frame_time(), 1)
@@ -412,42 +361,31 @@ run_app :: proc(config: ^Config) {
             // locks that one instead
             step: int
             if config.chromatic_ruler {
-                step = gui_note_ruler(layout.ruler, target_note, freq_estimation_active)
+                step = gui_note_ruler(layout.ruler, tuner.target_note, tuner.active)
             } else {
-                draw_note(target_note, layout.note, freq_estimation_active)
-                step = gui_note_arrows(layout.note, note_locked)
+                draw_note(tuner.target_note, layout.note, tuner.active)
+                step = gui_note_arrows(layout.note, tuner.locked)
             }
-            lock_toggled := gui_lock_toggle(layout.lock, note_locked)
+            lock_toggled := gui_lock_toggle(layout.lock, tuner.locked)
             if !gui_disabled {
                 if key_pressed(.SPACE) do lock_toggled = true
                 if key_pressed(.LEFT) do step = -1
                 if key_pressed(.RIGHT) do step = 1
             }
 
-            prev_target_note := target_note
-            if lock_toggled {
-                note_locked = !note_locked
+            if lock_toggled || step != 0 do quiet_time = 0
 
-                // Back to following the detected note
-                if !note_locked && detected_note.cents != -1 do target_note = detected_note
-            }
-            if step != 0 {
-                note_locked = true
-                for _ in 0 ..< abs(step) {
-                    if step < 0 do target_note = core.prev_chromatic_note(target_note)
-                    else do target_note = core.next_chromatic_note(target_note)
-                }
-            }
-            if target_note.cents != prev_target_note.cents {
-                retune(phase_comparator, target_note.frequency, config)
-            }
+            retune_target := false
+            if lock_toggled && core.toggle_note_lock(&tuner) do retune_target = true
+            if core.step_target_note(&tuner, step) do retune_target = true
+            if retune_target do retune(phase_comparator, tuner.target_note.frequency, config)
 
             draw_measurements(
                 layout.measurements,
                 layout.readout_align,
                 shown_pitch_info,
                 shown_last_good_pitch_info,
-                freq_estimation_active,
+                tuner.active,
                 out_of_range,
             )
 
@@ -464,33 +402,6 @@ run_app :: proc(config: ^Config) {
             }
 
             if gui_settings_button(layout.settings) do settings_open = true
-
-
-            when COLOR_CONTROLS {
-                color_picker({20, 500, 200, 200}, &color1)
-                config.strobe_color_1 = to_hex(color1)
-                draw_text(
-                    pixel_fonts.label_large.font,
-                    fmt.ctprintf("%x", config.strobe_color_1),
-                    {20, 480},
-                    16,
-                    0,
-                    LIGHTGRAY,
-                )
-
-                color_picker({300, 500, 200, 200}, &color2)
-                config.strobe_color_2 = to_hex(color2)
-                draw_text(
-                    pixel_fonts.label_large.font,
-                    fmt.ctprintf("%x", config.strobe_color_2),
-                    {300, 480},
-                    16,
-                    0,
-                    LIGHTGRAY,
-                )
-
-                set_strobe_colors(&strobe_display, {config.strobe_color_1, config.strobe_color_2})
-            }
 
 
             // Draw input level, the microphone icon marks it as the input
@@ -552,7 +463,7 @@ run_app :: proc(config: ^Config) {
 
                 draw_text(
                     pixel_fonts.label_small.font,
-                    fmt.ctprintf("Band NF %.1f", core.dbfs(phase_comparator.bands[0].noise_floor)),
+                    fmt.ctprintf("Band NF %.1f", core.dbfs(phase_comparator.bands[0].noise_floor.level)),
                     layout.stats + {0, 15},
                     12,
                     0,
@@ -638,8 +549,28 @@ run_app :: proc(config: ^Config) {
                 exclusive_control_mode = false
             }
         }
+
+        // With nothing to show the screen updates less often, it saves the battery of a tuner left open. The
+        // strobe is dark while no band is above the background noise, and the pitch detection still runs
+        // often enough to wake it up.
+        signal := tuner.active
+        for band in phase_comparator.bands {
+            if band.snr_db > STROBE_FADE_SNR_DB[0] do signal = true
+        }
+        touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
+        sliding := settings_slide != f32(int(settings_open))
+        if signal || touched || sliding {
+            quiet_time = 0
+        } else {
+            quiet_time += gfx_frame_time()
+        }
+        gfx_limit_fps(IDLE_FPS if quiet_time > IDLE_AFTER_S else 0)
     }
 }
 
 // Per second, how quickly the settings sheet closes the distance, like the ruler
 SETTINGS_SLIDE_SPEED :: 14
+
+// See quiet_time in run_app
+IDLE_AFTER_S :: 2
+IDLE_FPS :: 30

@@ -62,7 +62,8 @@ main :: proc() {
 
     // Run single bin DFT
     {
-        dft := core.init_dft(SIZE)
+        dft: core.SingleFreqDFT
+        defer core.destroy_dft(&dft)
         samples: [SIZE]f32
         core.set_dft_freq(&dft, 110.0/48_000.0, SIZE)
 
