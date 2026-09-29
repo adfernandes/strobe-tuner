@@ -60,6 +60,23 @@ StrobeGeometry :: struct {
     curvature_radius: f32, // outer radius of the innermost track, each track further out is a band_height larger
     band_height:      f32,
     period_count:     f32, // how many strobe periods fit in a circle
+    density:          f32, // period_count is this many times the desktop's, see strobe_density
+}
+
+// The desktop tracks' circle and how much of it shows across the window
+DESKTOP_TRACKS_RADIUS :: 440.0
+DESKTOP_TRACKS_PERIODS :: 12.0
+
+// A phone's strobe is scaled up and narrower, it shows a thinner slice of a larger circle and only a
+// stripe or two of the desktop's pattern. The periods are packed tighter to show as many across as the
+// desktop, a whole number of them so the circle stays seamless, and never fewer than the desktop's.
+strobe_density :: proc(half_width, radius: f32) -> f32 {
+    visible_angle :: proc(half_width, radius: f32) -> f32 {
+        return math.asin(min(half_width / radius, 1))
+    }
+    desktop := visible_angle(STROBE_WIDTH / 2, DESKTOP_TRACKS_RADIUS)
+    periods := math.round(DESKTOP_TRACKS_PERIODS * desktop / visible_angle(half_width, radius))
+    return max(periods, DESKTOP_TRACKS_PERIODS) / DESKTOP_TRACKS_PERIODS
 }
 
 // The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
@@ -79,17 +96,23 @@ strobe_geometry :: proc(
         g.band_height = 26.0
         g.period_count = 4.0
     case .CURVED_TRACKS:
-        g.curvature_radius = 440.0
+        g.curvature_radius = DESKTOP_TRACKS_RADIUS
         g.band_height = 66.0
         if band_count > 3 {
             g.band_height = 50.0
         }
-        g.period_count = 12.0
+        g.period_count = DESKTOP_TRACKS_PERIODS
     case .TRACE:
         return {}, false
     }
     g.curvature_radius *= scale
     g.band_height *= scale
+
+    g.density = 1
+    if display_type == .CURVED_TRACKS {
+        g.density = strobe_density(rect.width / 2, g.curvature_radius)
+        g.period_count *= g.density
+    }
 
     g.y = rect.y + rect.height - scale * STROBE_HEIGHT
     if display_type == .CURVED_TRACKS {
@@ -313,7 +336,7 @@ draw_strobe_display :: proc(
             {rect.x, rect.y},
             self.glow_scale,
         )
-        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count)
+        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, g.density)
         end_render_target()
 
         render_bloom(self)
@@ -333,7 +356,7 @@ draw_strobe_display :: proc(
         set_blend_mode(.ALPHA)
     } else {
         draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
-        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count)
+        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, g.density)
     }
 
     // Draw labels for partials
@@ -438,6 +461,7 @@ draw_strobe_bands :: proc(
     curvature_radius: f32,
     band_height: f32,
     period_count: f32,
+    density: f32,
 ) {
     curvature_radius := curvature_radius
     period_count := period_count
@@ -468,12 +492,14 @@ draw_strobe_bands :: proc(
 
         uniforms.period_count = period_count
         uniforms.time_stretch = band.time_stretch
-        uniforms.phase = band.scaled_phase
+        // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as
+        // many stripes a second as the desktop's
+        uniforms.phase = band.scaled_phase / density
 
         // How far the strobe moved this frame, see determine_band_phase
-        uniforms.phase_step = -band.phase_diff * band.speed
+        uniforms.phase_step = -band.phase_diff * band.speed / density
 
-        uniforms.amp, uniforms.visibility = update_band_look(self, &band, band_idx, period_count)
+        uniforms.amp, uniforms.visibility = update_band_look(self, &band, band_idx, period_count / density)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 
