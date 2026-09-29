@@ -89,36 +89,38 @@ SIL Open Font License 1.1 <br />
 
 ### Development
 
-Install the `just` command runner (https://github.com/casey/just) to run the various dev commands.
+You need [Odin](https://odin-lang.org/docs/install/), the [just](https://github.com/casey/just) command runner, git and clang (on macOS from the Xcode command line tools).
 
 ```sh
-
-# Clone this source code repository
-git clone https://github.com/dsego/strobe-tuner/
-
-# Change working directory
+git clone https://github.com/dsego/strobe-tuner
 cd strobe-tuner
-
-# Install necessary dependencies into the /external sub-directory
-just install-deps
-
-# Build deps
-just build-pffft
-just build-pa_ringbuffer
-
-# Compile & run the app code
 just dev
 ```
 
+The first run clones and compiles the dependencies into `external/`, later runs skip that.
+
 | Command | What it does |
 | --- | --- |
-| `just dev` | Debug build with the raylib renderer (OpenGL) |
-| `just dev sdl` | Debug build with the SDL3 GPU renderer and Metal shaders, needs `brew install sdl3` |
-| `just dev stats` | Debug build that also shows the signal stats and NSDF plots |
-| `just dev ios` | Builds for the iOS simulator and runs it there, the first run builds the native dependencies into `external/ios-sim` |
-| `just build`, `just build sdl` | Optimized builds with either renderer |
+| `just dev` | Debug build with the raylib renderer (OpenGL), then runs it |
+| `just dev sdl` | The same with the SDL3 GPU renderer and Metal shaders, needs `brew install sdl3` |
+| `just dev stats` | Also shows the signal stats and NSDF plots |
+| `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
+| `just build`, `just build sdl` | Optimized build with either renderer |
+| `just test` | Unit tests of the pitch detection and strobe code |
 
 Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
+
+#### Linux
+
+Only the raylib renderer, the SDL renderer only has Metal shaders. It needs the X11 headers for raylib, OpenGL and the audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
+
+```sh
+sudo apt install clang git libx11-dev    # Debian, Ubuntu
+sudo dnf install clang git libX11-devel  # Fedora
+just dev
+```
+
+The config is saved to `$XDG_CONFIG_HOME/SonicStrobe/config.ini`, or `~/.config/SonicStrobe/config.ini`.
 
 
 ### How it works

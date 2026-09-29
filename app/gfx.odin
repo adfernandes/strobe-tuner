@@ -57,6 +57,7 @@ import "core:math/linalg"
 RENDERER :: #config(RENDERER, "raylib")
 
 #assert(RENDERER == "raylib" || RENDERER == "sdl", "RENDERER must be raylib or sdl")
+#assert(RENDERER != "sdl" || ODIN_OS == .Darwin, "the sdl renderer only has Metal shaders, use raylib")
 
 
 Rect :: struct {

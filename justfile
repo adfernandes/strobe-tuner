@@ -3,35 +3,44 @@
 default:
     @just --list
 
-install-deps:
+# Clones and compiles the dependencies into external/, skips whatever is there already. dev and build run it first.
+setup:
     #!/usr/bin/env sh
+    set -eu
+    mkdir -p external
     cd external
-    # only for its ring buffer
-    git clone https://github.com/PortAudio/portaudio/
-    git clone https://github.com/dsego/odin-pa_ringbuffer/
-    git clone https://github.com/dsego/odin-pffft
-    git clone https://bitbucket.org/jpommier/pffft/
 
-build-pffft:
-    #!/usr/bin/env sh
-    cd external/pffft
-    clang pffft.c pffft.h -c -O2 -Os -fPIC
-    ar rcs pffft.a pffft.o
-    cp pffft.a ../odin-pffft/
+    clone() {
+        [ -d "$(basename "$1")" ] || git clone --depth 1 "$1"
+    }
+    clone https://github.com/PortAudio/portaudio # only for its ring buffer
+    clone https://github.com/dsego/odin-pa_ringbuffer
+    clone https://github.com/dsego/odin-pffft
+    clone https://bitbucket.org/jpommier/pffft
 
-build-pa_ringbuffer:
-    #!/usr/bin/env sh
-    cd external/portaudio/src/common
-    clang pa_ringbuffer.c pa_ringbuffer.h -c -O2 -Os -fPIC
-    ar rcs pa_ringbuffer.a pa_ringbuffer.o
-    cp pa_ringbuffer.a ../../../odin-pa_ringbuffer/
+    # static_lib <source.c> <library.a>, the object file stays next to the source
+    static_lib() {
+        [ -f "$2" ] && return
+        echo "Building $2"
+        clang -c -O2 -fPIC "$1" -o "${1%.c}.o"
+        ar rcs "$2" "${1%.c}.o"
+    }
+    static_lib pffft/pffft.c odin-pffft/pffft.a
+    static_lib portaudio/src/common/pa_ringbuffer.c odin-pa_ringbuffer/pa_ringbuffer.a
+
+    # Odin's vendored stb and miniaudio ship compiled for macOS, on Linux they're built into the Odin install once
+    if [ "$(uname -s)" = Linux ]; then
+        vendor="$(odin root)/vendor"
+        [ -f "$vendor/stb/lib/stb_image.a" ] || sh "$vendor/stb/src/build_stb.sh"
+        [ -f "$vendor/miniaudio/lib/miniaudio.a" ] || sh "$vendor/miniaudio/src/build_miniaudio.sh"
+    fi
 
 # just dev [target]
 #   (none) raylib renderer
 #   sdl    SDL3 GPU renderer with Metal shaders (brew install sdl3)
 #   stats  with the signal stats and NSDF plots
 #   ios    SDL renderer on the iOS simulator, the first run builds the native deps into external/ios-sim
-dev target="":
+dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
         "") odin run app -debug ;;
@@ -42,10 +51,14 @@ dev target="":
     esac
 
 # just build [sdl]
-build target="":
+build target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
         "") odin build app -o:speed -microarch:native ;;
         sdl) odin build app -o:speed -microarch:native -define:RENDERER=sdl ;;
         *) echo "Unknown target '{{target}}', use sdl"; exit 1 ;;
     esac
+
+# Runs the unit tests in core
+test:
+    odin test core
