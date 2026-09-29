@@ -29,9 +29,13 @@
     <array>
         <integer>1</integer>
     </array>
-    <!-- Without a launch screen iOS runs the app letterboxed at a legacy resolution -->
+    <!-- Without a launch screen iOS runs the app letterboxed at a legacy resolution. The color is the window
+         background (window_bg_color), so launch doesn't flash white. -->
     <key>UILaunchScreen</key>
-    <dict/>
+    <dict>
+        <key>UIColorName</key>
+        <string>LaunchBackground</string>
+    </dict>
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
