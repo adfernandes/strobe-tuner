@@ -90,12 +90,14 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
     l.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
 
     if ruler {
-        // The readout in the top row, its labels on the line of the response and the level meter. The note
-        // with the lock under it centred between the readout values and the bottom row. Offsets from the
-        // middle of the ruler.
+        // The readout in the top row, the response and the level meter centred on its values, the labels
+        // sit above. The note with the lock under it centred between the readout values and the bottom row.
+        // Offsets from the middle of the ruler.
         l.ruler_scale = ruler_scale
         readout_top := l.response.y - LABEL_SIZE / 2
         readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * ruler_scale * READOUT_SIZE
+        l.response.y = readout_bottom - CAP_HALF * ruler_scale * READOUT_SIZE
+        l.level_meter.y = l.response.y - 2
         rows_bottom := corners - TRANSPOSE_LABEL_TOP
 
         note_top := -CAP_HALF * ruler_scale * RULER_NOTE_SIZE

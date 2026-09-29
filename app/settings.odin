@@ -49,7 +49,7 @@ gui_settings :: proc(
     changed: bool,
 ) {
     // Over the main screen
-    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(window_bg_color))
+    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(sheet_bg_color))
 
     draw_label(pixel_fonts.title, "Settings", l.title, text_color_white, 1)
 
@@ -205,7 +205,7 @@ gui_track_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(window_bg_color))
+    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(sheet_bg_color))
 
     // The title, then the note the track follows and its target
     title := fmt.ctprintf("Track %d", track + 1)

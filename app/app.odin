@@ -27,7 +27,7 @@ import "core:strings"
 
 import "../core"
 
-window_bg_color: u32 = 0x40414AFF
+sheet_bg_color: u32 = 0x40414AFF
 strobe_bg_color: u32 = 0x15161AFF
 
 
@@ -284,7 +284,7 @@ run_app :: proc(config: ^Config) {
         update_pixel_fonts(layout.ruler_scale)
 
         // Draw the GUI controls
-        gfx_begin_frame(hex(window_bg_color))
+        gfx_begin_frame(hex(strobe_bg_color))
         defer gfx_end_frame()
 
         // Choose new audio input, or reopen the same one
@@ -470,7 +470,7 @@ run_app :: proc(config: ^Config) {
 
                 meter := layout.level_meter + {20, 0}
                 track := Rect{meter.x, meter.y, 60, 4}
-                draw_rounded_rect(track, 2, hex(strobe_bg_color))
+                draw_rounded_rect(track, 2, pill_dark)
                 // The level is the rounded track cut off flat where it ends
                 begin_scissor({meter.x, meter.y, 60 + clamp(pitch_info.rms_dbfs, -60, 0), 4})
                 draw_rounded_rect(track, 2, hex(0x82E2FFFF))
