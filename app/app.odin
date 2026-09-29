@@ -559,11 +559,9 @@ run_app :: proc(config: ^Config) {
                 layout.strobe,
             )
 
-            // The strobe looks set into the window above the sheet like above the panel
-            strobe_bottom := layout.strobe.y + layout.strobe.height
-            if config.strobe_display_type != .TRACE && settings_layout.sheet.y < strobe_bottom + 1 {
-                draw_strobe_bottom_shadow(&strobe_display, layout.strobe, settings_layout.sheet.y)
-            }
+            // The strobe looks set into the window above the sheet like above the panel, and the edge
+            // shades the panel on the way up
+            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, settings_layout.sheet.y)
 
             // Not the tap that opened it, and not while it slides away
             gui_disabled = !(settings_was_open && settings_open)
@@ -599,11 +597,7 @@ run_app :: proc(config: ^Config) {
                 layout.strobe,
             )
 
-            strobe_bottom := layout.strobe.y + layout.strobe.height
-            // Up to the strobe's edge too, a short sheet stops right there
-            if config.strobe_display_type != .TRACE && sheet_layout.sheet.y < strobe_bottom + 1 {
-                draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
-            }
+            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
 
             // Not the tap that opened it, and not while it slides away
             gui_disabled = !(track_was_open && track_open)
