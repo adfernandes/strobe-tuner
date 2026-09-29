@@ -10,6 +10,10 @@ app.bin.dSYM/*
 
 build/
 
+# Provisioning profiles, they carry the team id, certificates and device ids
+*.mobileprovision
+*.provisionprofile
+
 # Ignore everything in external/
 external/*
 
