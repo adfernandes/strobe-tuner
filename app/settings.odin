@@ -204,11 +204,12 @@ gui_track_settings :: proc(
     title := fmt.ctprintf("Track %d", track + 1)
     draw_label(pixel_fonts.title, title, l.title, text_color_white, 1)
     details := fmt.ctprintf(
-        "%v%v%v · %.1f Hz",
+        "%v%v%v · %.1f Hz%v",
         band.note.name,
         "#" if band.note.is_accidental else "",
         band.note.octave,
         band.freq_hz,
+        "" if band.in_range else " · too high to show",
     )
     title_size := measure_label(pixel_fonts.title, title, 1)
     details_y := l.title.y + (title_size.y - LABEL_SIZE) / 2

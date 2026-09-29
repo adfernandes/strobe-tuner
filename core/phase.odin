@@ -42,6 +42,9 @@ MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 8
 MAX_WINDOW_SIZE :: 262_144 // the sample buffer, the window for the lowest note fits in it
 PHASE_AVERAGE_SPREAD_CENTS :: 5
+// A band goes up to 90% of Nyquist (21.6 kHz at 48 kHz), above it the audio can't hold the frequency and
+// the input filters roll off before that anyway
+MAX_BAND_NORM_FREQ :: 0.45
 
 // The strobe phase of each band is rescaled to this frequency so that every note spins at the same
 // rate per cent of detuning. Matches the speed of the previous hop-based phase difference at 120 FPS.
@@ -73,6 +76,7 @@ PhaseBand :: struct {
     interval:                     f32, // interval ratio, eg 1x for base note, 1.5x for perfect fifth,  2x for octave, etc
     offset_cents:                 f32, // harmonic mode, the track stands still this far off the exact partial, eg a stretched octave
     speed_scale:                  f32, // harmonic mode, on top of the track's speed, 1 leaves it as is
+    in_range:                     bool, // below MAX_BAND_NORM_FREQ, a high partial of a high note may not be
     note:                         Note,
     norm_freq:                    f32,
     freq_diff_hz:                 f32,
@@ -269,6 +273,7 @@ set_phase_comparator_freq :: proc(
             speed *= speed_multiplier
         }
         band.norm_freq = band.freq_hz / self.samplerate
+        band.in_range = band.norm_freq < MAX_BAND_NORM_FREQ
         band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
 
         if self.mode == .HARMONIC_MODE || i == 0 {
@@ -315,6 +320,13 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> 
     self.sample_clock += i64(available)
 
     for &band, band_idx in self.bands {
+        // Nothing to measure up there, quiet so the track stays dark
+        if !band.in_range {
+            band.amp = 0
+            band.snr_db = 0
+            band.phase_diff = 0
+            continue
+        }
         determine_band_phase(self, &band, band_idx, use_phase_average)
         update_band_noise_floor(self, &band, band_idx)
     }
@@ -362,6 +374,14 @@ test_track_offset_and_speed :: proc(t: ^testing.T) {
     testing.expect_value(t, self.bands[1].note.name, 'A')
     testing.expect_value(t, self.bands[1].note.octave, 3)
     testing.expect(t, abs(self.bands[2].speed - 0.01 * 3 * 0.5) < 1e-6)
+
+    testing.expect(t, self.bands[2].in_range)
+
+    // 8× of C8 is past what 48 kHz can hold
+    set_phase_comparator_tracks(self, {1, 2, 8}, {0, 0, 0}, {1, 1, 1})
+    set_phase_comparator_freq(self, 4186, 440, 0.01, 2, .HARMONIC_MODE)
+    testing.expect(t, self.bands[1].in_range)
+    testing.expect(t, !self.bands[2].in_range)
 
     // A missing speed leaves the track at its normal speed
     set_phase_comparator_tracks(self, intervals, {0, 0, 0}, {1, 1, 0})

@@ -356,6 +356,9 @@ draw_strobe_display :: proc(
             r += band_height
             sin := math.sqrt(r * r - cos * cos)
 
+            // Hidden, too high for the sample rate
+            if !band.in_range do continue
+
             // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
             // decimal point like the readout, the digits don't shift as the value changes.
             if config.show_band_cents && band.snr_db > band.noise_floor.snr_threshold_db {
@@ -489,8 +492,11 @@ draw_strobe_bands :: proc(
         uniforms.highlight = self.selection if selected else 0
         uniforms.dim = 0 if selected else self.selection
 
-        set_shader_uniforms(self.strobe_shader, uniforms)
-        draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})
+        // A partial too high for the sample rate leaves a gap, its sheet still opens there
+        if band.in_range {
+            set_shader_uniforms(self.strobe_shader, uniforms)
+            draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})
+        }
 
         if phase_info.mode == .FINE_MODE {
             period_count *= 2.0
