@@ -41,7 +41,7 @@ INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
-// A Harmonics preset, it replaces the partials and clears what was set on each track
+// A preset of the tracks for the I key, it replaces the partials and clears what was set on each track
 apply_interval_preset :: proc(config: ^Config, index: int) {
     options := INTERVAL_OPTIONS
     defaults := get_config_defaults()

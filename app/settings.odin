@@ -32,7 +32,7 @@ PITCH_STANDARD_MAX :: 480
 SEGMENT_WIDTH :: 60
 
 // The rows in gui_settings, iOS has no input row
-SETTINGS_ROWS :: 8 when IOS else 9
+SETTINGS_ROWS :: 7 when IOS else 8
 
 settings_separator_color := hex(0x35363EFF)
 
@@ -84,27 +84,6 @@ gui_settings :: proc(
         labels := []cstring{"Harmonic", "Fine"}
         if i, ok := gui_segmented(rect, labels, int(config.strobe_mode)); ok {
             config.strobe_mode = core.StrobeMode(i)
-            changed = true
-        }
-    }
-
-    {
-        // The partials on the tracks in harmonic mode, the same sets as the I key
-        labels := []cstring{"1 2 4", "1 1½ 2", "1 2 3"}
-        rect := settings_row(l, row, "Harmonics", f32(len(labels)) * SEGMENT_WIDTH)
-        row += 1
-        // None selected once a track is changed in its sheet, tapping a preset then resets all the tracks
-        options := INTERVAL_OPTIONS
-        defaults := get_config_defaults()
-        preset := config.strobe_intervals_index
-        if preset < 0 || preset >= len(options) ||
-           config.strobe_intervals != options[preset] ||
-           config.strobe_offsets_cents != defaults.strobe_offsets_cents ||
-           config.strobe_speeds != defaults.strobe_speeds {
-            preset = -1
-        }
-        if i, ok := gui_segmented(rect, labels, preset); ok {
-            apply_interval_preset(config, i)
             changed = true
         }
     }
@@ -315,7 +294,7 @@ gui_track_settings :: proc(
             changed = true
         } else if steps < 0 && count > 1 {
             config.strobe_intervals[top] = 0
-            // Cleared so a preset still shows as selected, and a track added there later starts fresh
+            // Cleared so a track added there later starts fresh
             config.strobe_offsets_cents[top] = 0
             config.strobe_speeds[top] = 1
             changed = true

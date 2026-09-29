@@ -150,7 +150,7 @@ gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
 TRANSPOSE_LABEL_TOP :: 1.5 * READOUT_VALUE_Y + STEPPER_SIZE / 2
 
 
-// A partial without the ×, the fifth as 1½ like the Harmonics presets
+// A partial without the ×, the fifth as 1½ like the 1 1½ 2 preset
 partial_text :: proc(partial: f32) -> cstring {
     if partial == 1.5 do return "1½"
     return fmt.ctprintf("%v", partial)
