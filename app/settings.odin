@@ -188,10 +188,11 @@ gui_settings :: proc(
 // A track's own sheet, opened by tapping it on the strobe in harmonic mode. Shorter than the settings so the
 // strobe stays in sight while the track is tuned. Returns close when ✕ is tapped, changed when the strobe
 // needs updating.
-TRACK_SETTINGS_ROWS :: 4
+TRACK_SETTINGS_ROWS :: 5
 
 // The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
 TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
+MAX_TRACKS :: 5
 TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
 
@@ -227,10 +228,11 @@ gui_track_settings :: proc(
     slot := track_slot(config, track)
     if slot < 0 do return
 
-    // What the track goes back to, the partial of the last preset
+    // What the track goes back to, the partial of the last preset. A track added on top of it keeps its own.
     options := INTERVAL_OPTIONS
     preset := clamp(config.strobe_intervals_index, 0, len(options) - 1)
     preset_partial := options[preset][slot]
+    if preset_partial < 1 do preset_partial = config.strobe_intervals[slot]
 
     row := 0
 
@@ -291,6 +293,31 @@ gui_track_settings :: proc(
             config.strobe_intervals[slot] = preset_partial
             config.strobe_offsets_cents[slot] = 0
             config.strobe_speeds[slot] = 1
+            changed = true
+        }
+    }
+
+    {
+        // Added and removed on top, a new track follows the next whole partial above the one under it,
+        // the 1½ fifth is only for picking by hand
+        rect := settings_row(l, row, "Tracks", 176)
+        row += 1
+        count, top := 0, 0
+        for interval, i in config.strobe_intervals {
+            if interval < 1 do continue
+            count += 1
+            top = i
+        }
+        steps, _ := gui_stepper_buttons(rect, fmt.ctprintf("%d", count))
+        if steps > 0 && count < MAX_TRACKS && top + 1 < MAX_INTERVALS {
+            partials := TRACK_PARTIALS
+            config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, partials[len(partials) - 1])
+            changed = true
+        } else if steps < 0 && count > 1 {
+            config.strobe_intervals[top] = 0
+            // Cleared so a preset still shows as selected, and a track added there later starts fresh
+            config.strobe_offsets_cents[top] = 0
+            config.strobe_speeds[top] = 1
             changed = true
         }
     }

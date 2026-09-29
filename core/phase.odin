@@ -129,6 +129,7 @@ PhaseComparator :: struct {
     samplerate:         f32,
     mode:               StrobeMode,
     available:          int,
+    snr_threshold_db:   f32, // for the noise floor of a track added later
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:       i64,
@@ -153,16 +154,10 @@ init_phase_comparator :: proc(
 
     self.mode = mode
     self.base_freq_hz = base_freq_hz
+    self.snr_threshold_db = noise_floor_snr_db_threshold
 
     for interval in strobe_intervals {
-        if interval >= 1.0 {
-            band := PhaseBand{}
-            band.interval = interval
-            band.speed_scale = 1
-            band.noise_floor = init_noise_floor(noise_floor_snr_db_threshold)
-
-            append(&self.bands, band)
-        }
+        if interval >= 1.0 do append_phase_band(self, interval)
     }
 
 
@@ -183,9 +178,17 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     free(self)
 }
 
-// Like init_phase_comparator, a band per interval of 1 or more, the rest are padding. The bands are made
-// once, so it has to be as many as then. Kept in fine mode too, for switching back to harmonic mode.
-// Takes effect with the next set_phase_comparator_freq.
+// A new band on top, set_phase_comparator_freq tunes it
+append_phase_band :: proc(self: ^PhaseComparator, interval: f32) {
+    band := PhaseBand{}
+    band.interval = interval
+    band.speed_scale = 1
+    band.noise_floor = init_noise_floor(self.snr_threshold_db)
+    append(&self.bands, band)
+}
+
+// Like init_phase_comparator, a band per interval of 1 or more, the rest are padding. Adds or removes bands
+// on top to match. Kept in fine mode too, for switching back to harmonic mode.
 // The partial, target offset and speed of each track, the offsets and speeds line up with the intervals.
 // Takes effect with the next set_phase_comparator_freq.
 set_phase_comparator_tracks :: proc(
@@ -194,10 +197,20 @@ set_phase_comparator_tracks :: proc(
     offsets_cents: []f32,
     speeds: []f32,
 ) {
+    count := 0
+    for interval in strobe_intervals {
+        if interval >= 1.0 do count += 1
+    }
+    for len(self.bands) > count {
+        band := pop(&self.bands)
+        destroy_dft(&band.dft_config)
+        destroy_dft(&band.averaged_dft_config)
+    }
+    for len(self.bands) < count do append_phase_band(self, 1)
+
     band_idx := 0
     for interval, i in strobe_intervals {
         if interval < 1.0 do continue
-        assert(band_idx < len(self.bands), "more strobe intervals than bands")
         band := &self.bands[band_idx]
         band.interval = interval
         band.offset_cents = offsets_cents[i]
@@ -205,7 +218,6 @@ set_phase_comparator_tracks :: proc(
         band.speed_scale = speeds[i] if speeds[i] > 0 else 1
         band_idx += 1
     }
-    assert(band_idx == len(self.bands), "fewer strobe intervals than bands")
 }
 
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
@@ -396,6 +408,17 @@ test_track_offset_and_speed :: proc(t: ^testing.T) {
     set_phase_comparator_tracks(self, intervals, {0, 0, 0}, {1, 1, 0})
     set_phase_comparator_speed(self, 0.01)
     testing.expect(t, abs(self.bands[2].speed - 0.01 * 3) < 1e-6)
+
+    // Tracks added and removed on top
+    set_phase_comparator_tracks(self, {1, 2, 3, 4, 5}, {0, 0, 0, 0, 0}, {1, 1, 1, 1, 1})
+    set_phase_comparator_freq(self, 110, 440, 0.01, 2, .HARMONIC_MODE)
+    testing.expect_value(t, len(self.bands), 5)
+    testing.expect(t, abs(self.bands[4].freq_hz - 550) < 0.001)
+    testing.expect(t, self.bands[4].dft_config.window_size > 0)
+
+    set_phase_comparator_tracks(self, {1, 2, 0, 0, 0}, {0, 0, 0, 0, 0}, {1, 1, 1, 1, 1})
+    testing.expect_value(t, len(self.bands), 2)
+    testing.expect_value(t, self.bands[1].interval, 2)
 }
 
 
