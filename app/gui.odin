@@ -19,7 +19,6 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:strings"
-import "core:time"
 
 
 import "../core"
@@ -93,32 +92,34 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
     return gui_button({rect.x, center.y - TOUCH_HEIGHT / 2, rect.width, TOUCH_HEIGHT})
 }
 
-// The key of a transposing instrument: an LED and the label like the FAST toggle, then the key between −
-// and + that step it. The LED lights in any key but C so it isn't left on by mistake, tapping it or the
-// label or double tapping the key goes back to C. pos is the left edge, vertically centred. Returns the
-// new transpose, see Config.transpose.
+// The key of a transposing instrument: the key between − and + that step it, and above them an LED and
+// the label like the FAST toggle, the label over its value like the readout. The LED lights in any key
+// but C so it isn't left on by mistake, tapping it or the label goes back to C. pos is the left edge and
+// the middle of the stepper, see TRANSPOSE_LABEL_TOP. Returns the new transpose, see Config.transpose.
 gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
     // A Bb instrument sounds a tone below the written note, the note shows 2 semitones up
     KEYS :: [12]cstring{"C", "B", "Bb", "A", "Ab", "G", "Gb", "F", "E", "Eb", "D", "Db"}
+    LABEL :: "TRANSPOSE"
     LED_SIZE :: 8
     LABEL_GAP :: 10
-    STEPPER_GAP :: 26 // from the label to the −
     KEY_SLOT :: 56 // between the − and +, wide enough for "Bb" without them moving
-    STEP_TOUCH :: 56 // centred on the − and +, up to the key's touch area
-    KEY_TOUCH :: 28
-    TOUCH_HEIGHT :: 52
+    STEP_TOUCH :: 56 // centred on the − and +, the inner halves run to the middle of the key
+    TOUCH_BELOW :: 26 // from the middle of the stepper, its touch area runs up to the label
 
     keys := KEYS
     on := transpose != 0
 
-    draw_led({pos.x, pos.y - LED_SIZE / 2, LED_SIZE, LED_SIZE}, on, pill_yellow)
+    // The LED and the label
+    label_top := pos.y - TRANSPOSE_LABEL_TOP
+    label_middle := label_top + LABEL_SIZE / 2
+    draw_led({pos.x, label_middle - LED_SIZE / 2, LED_SIZE, LED_SIZE}, on, pill_yellow)
     label_x := pos.x + LED_SIZE + LABEL_GAP
-    label_width := measure_label(pixel_fonts.label, "TRANSPOSE", 1).x
-    draw_label(pixel_fonts.label, "TRANSPOSE", {label_x, pos.y - 7}, text_color_white if on else text_color_light, 1)
+    label_width := measure_label(pixel_fonts.label, LABEL, 1).x
+    draw_label(pixel_fonts.label, LABEL, {label_x, label_top}, text_color_white if on else text_color_light, 1)
 
-    // − and the key and + after the label
-    font := pixel_fonts.label_large
-    minus_x := label_x + label_width + STEPPER_GAP
+    // − and the key and + under the label, lined up with its left edge
+    font := pixel_fonts.stepper
+    minus_x := label_x
     minus_size := measure_label(font, "−")
     plus_size := measure_label(font, "+")
     key_size := measure_label(font, keys[transpose])
@@ -129,26 +130,24 @@ gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
     draw_label(font, keys[transpose], {key_center - key_size.x / 2, text_y}, text_color_white)
     draw_label(font, "+", {plus_x, text_y}, text_color_light)
 
-    // Down a key is up a semitone on the note
-    top := pos.y - TOUCH_HEIGHT / 2
+    // Down a key is up a semitone on the note. The touch areas split halfway from the label to the stepper,
+    // the + is under the label.
+    step_top := (label_top + LABEL_SIZE + text_y) / 2
+    step_height := pos.y + TOUCH_BELOW - step_top
     minus_left := minus_x + minus_size.x / 2 - STEP_TOUCH / 2
     plus_right := plus_x + plus_size.x / 2 + STEP_TOUCH / 2
-    key_left := key_center - KEY_TOUCH / 2
-    key_right := key_center + KEY_TOUCH / 2
-    if gui_button({minus_left, top, key_left - minus_left, TOUCH_HEIGHT}) do return (transpose + 1) % 12
-    if gui_button({key_right, top, plus_right - key_right, TOUCH_HEIGHT}) do return (transpose + 11) % 12
-    if gui_button({key_left, top, KEY_TOUCH, TOUCH_HEIGHT}) {
-        now := time.tick_now()
-        double_click := time.tick_diff(transpose_last_click, now) < 400 * time.Millisecond
-        transpose_last_click = now
-        if double_click do return 0
-    }
-    // The LED and the label, up to the − touch area
-    if gui_button({pos.x - 12, top, minus_left - pos.x + 12, TOUCH_HEIGHT}) do return 0
+    if gui_button({minus_left, step_top, key_center - minus_left, step_height}) do return (transpose + 1) % 12
+    if gui_button({key_center, step_top, plus_right - key_center, step_height}) do return (transpose + 11) % 12
+    // The LED and the label, down to the stepper
+    reset_left := pos.x - 12
+    reset_top := label_top - 14
+    if gui_button({reset_left, reset_top, label_x + label_width + 12 - reset_left, step_top - reset_top}) do return 0
     return transpose
 }
 
-transpose_last_click: time.Tick
+// From the top of the transpose label to the middle of the stepper under it, further from its value than the
+// readout's labels so a tap on the + doesn't reach the label
+TRANSPOSE_LABEL_TOP :: 1.5 * READOUT_VALUE_Y + STEPPER_SIZE / 2
 
 
 // A partial without the ×, the fifth as 1½ like the Harmonics presets

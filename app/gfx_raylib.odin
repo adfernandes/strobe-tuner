@@ -18,6 +18,7 @@ package app
 
 // raylib backend (OpenGL), see gfx.odin
 
+import "base:intrinsics"
 import "core:reflect"
 import CF "core:sys/darwin/CoreFoundation"
 import "core:strings"
@@ -63,6 +64,14 @@ when RENDERER == "raylib" {
         rl.InitWindow(width, height, title)
         // Escape closes the sheets, Cmd+Q quits
         rl.SetExitKey(.KEY_NULL)
+
+        // The colours are sRGB. Untagged, macOS shows the pixels in the display's own colour space and a
+        // Display P3 screen oversaturates them.
+        when ODIN_OS == .Darwin {
+            window := (^NSWindow)(rl.GetWindowHandle())
+            srgb := intrinsics.objc_send(^NSColorSpace, NSColorSpace, "sRGBColorSpace")
+            intrinsics.objc_send(nil, window, "setColorSpace:", srgb)
+        }
         rl.SetTargetFPS(120)
         return rl.IsWindowReady()
     }
@@ -152,6 +161,16 @@ when RENDERER == "raylib" {
         @(default_calling_convention = "c")
         foreign core_foundation {
             CFPreferencesGetAppBooleanValue :: proc(key, application: CF.String, valid: ^b8) -> b8 ---
+        }
+
+        @(objc_class = "NSColorSpace")
+        NSColorSpace :: struct {
+            using _: intrinsics.objc_object,
+        }
+
+        @(objc_class = "NSWindow")
+        NSWindow :: struct {
+            using _: intrinsics.objc_object,
         }
 
         // On unless turned off in System Settings, a missing key means the default
