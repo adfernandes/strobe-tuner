@@ -1,7 +1,10 @@
 // Plays a recording through the tuner's pitch detection like the app hears it, and prints what it makes of
 // it over time: the detected pitch, its clarity and SNR, and whether the tuner holds the note.
 //
-//   odin run sandbox/replay -- <file.wav|mp3|flac>
+//   odin run sandbox/replay -- <file.wav|mp3|flac> [lead-in seconds]
+//
+// The lead-in is digital silence before the recording, 2 seconds by default, like a loopback input before
+// the player starts. 0 starts on the recording, like opening the app while a note rings.
 //
 // miniaudio decodes wav, mp3 and flac, convert anything else first, e.g.
 //   ffmpeg -i E1.m4a E1.wav
@@ -10,6 +13,7 @@ package replay
 
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 import ma "vendor:miniaudio"
 
 import "../../core"
@@ -30,17 +34,20 @@ STROBE_SPEED :: 0.0125
 FRAME_SAMPLES :: SAMPLERATE / 60
 PRINT_EVERY_S :: 0.25
 
-// Digital silence before the recording, like a loopback input before the player starts. The noise floor
-// learns the background in its first second, a recording that starts on the note would pass for it.
 LEAD_IN_S :: 2
 
 main :: proc() {
     if len(os.args) < 2 {
-        fmt.eprintln("usage: odin run sandbox/replay -- <file.wav|mp3|flac>")
+        fmt.eprintln("usage: odin run sandbox/replay -- <file.wav|mp3|flac> [lead-in seconds]")
         os.exit(1)
     }
 
-    samples, ok := decode(os.args[1], LEAD_IN_S)
+    lead_in_s := LEAD_IN_S
+    if len(os.args) > 2 {
+        lead_in_s = strconv.parse_int(os.args[2]) or_else LEAD_IN_S
+    }
+
+    samples, ok := decode(os.args[1], lead_in_s)
     if !ok {
         fmt.eprintln("Can't decode", os.args[1])
         os.exit(1)
@@ -73,7 +80,7 @@ main :: proc() {
         core.audio_capture_callback(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         if core.update_tuner(&tuner, pitch) do retune(strobe, tuner.target_note.frequency)
-        core.run_phase_detection(strobe, true)
+        core.run_phase_detection(strobe, true, pitch.is_tonal)
         if !pitch.fresh do continue
 
         // Every so often, and whenever the tuner lets go of the note or picks it up

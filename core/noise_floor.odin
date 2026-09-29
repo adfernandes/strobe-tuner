@@ -24,6 +24,14 @@ MIN_RMS_TRACKABLE :: 1e-6
 NOISE_FLOOR_TIME_S :: 0.5
 NOISE_FLOOR_RISE_DB_PER_S :: 1.0
 NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known yet
+// The warmup waits out a clear pitch, a note ringing when the app starts isn't the background. One that
+// goes on this long is after all, e.g. hum. Most of a plucked string has died away by then.
+NOISE_FLOOR_WARMUP_MAX_TONAL_S :: 8.0
+// The floor is known once it learned this much of the background, a note starting in the first measurements
+// (the attack isn't a clear pitch yet) passes for the background otherwise
+NOISE_FLOOR_KNOWN_AFTER_S :: 0.25
+// Over a floor that isn't known yet, a note stands out clearly
+NOISE_FLOOR_UNKNOWN_SNR_DB :: 40.0
 MIN_NOISE_FLOOR :: 1e-6 // -120 dB, a level of digital silence doesn't pull it down to zero
 
 
@@ -33,6 +41,7 @@ MIN_NOISE_FLOOR :: 1e-6 // -120 dB, a level of digital silence doesn't pull it d
 NoiseFloor :: struct {
     level:            f32, // 0 until the first update
     warmup:           f32, // seconds left of following the level ungated
+    tonal_time:       f32, // seconds of the warmup waited out on a clear pitch
     snr_threshold_db: f32, // louder than this over the floor counts as something playing
 }
 
@@ -44,13 +53,29 @@ init_noise_floor :: proc(snr_threshold_db: f32) -> NoiseFloor {
 reset_noise_floor :: proc(self: ^NoiseFloor) {
     self.level = 0
     self.warmup = NOISE_FLOOR_WARMUP_S
+    self.tonal_time = 0
 }
 
 // Updates with the level measured over the last dt seconds, returns its SNR over the floor before the update.
 // Without warming_up the warmup time doesn't run out, e.g. while the window is still on the silence it
-// starts out with.
-update_noise_floor :: proc(self: ^NoiseFloor, level: f32, dt: f32, warming_up := true) -> (snr_db: f32) {
+// starts out with. is_tonal is a clear pitch, the warmup doesn't learn from it.
+update_noise_floor :: proc(
+    self: ^NoiseFloor,
+    level: f32,
+    dt: f32,
+    warming_up := true,
+    is_tonal := false,
+) -> (
+    snr_db: f32,
+) {
     level := max(level, MIN_NOISE_FLOOR)
+
+    if self.warmup > 0 && is_tonal && self.tonal_time < NOISE_FLOOR_WARMUP_MAX_TONAL_S {
+        self.tonal_time += dt
+        known := self.level != 0 && NOISE_FLOOR_WARMUP_S - self.warmup >= NOISE_FLOOR_KNOWN_AFTER_S
+        if !known do return NOISE_FLOOR_UNKNOWN_SNR_DB
+        return 20 * math.log10(level / self.level)
+    }
 
     if self.level == 0 {
         self.level = level
@@ -93,4 +118,25 @@ test_noise_floor :: proc(t: ^testing.T) {
     // Back down after the note
     for _ in 0 ..< 200 do update_noise_floor(&floor, 0.001, DT)
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "after the note, got %v", floor.level)
+}
+
+@(test)
+test_noise_floor_warmup_on_a_note :: proc(t: ^testing.T) {
+    DT :: 0.05
+
+    // Started while a note rings, it stands out and the floor waits for the background. The attack isn't a
+    // clear pitch yet.
+    floor := init_noise_floor(10)
+    snr: f32
+    update_noise_floor(&floor, 0.2, DT)
+    for _ in 0 ..< 40 do snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+    testing.expectf(t, snr >= NOISE_FLOOR_UNKNOWN_SNR_DB, "note SNR, got %v dB", snr)
+    for _ in 0 ..< 100 do update_noise_floor(&floor, 0.001, DT)
+    testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "background, got %v", floor.level)
+
+    // A tone that never stops is the background after all
+    floor = init_noise_floor(10)
+    for _ in 0 ..< 300 do snr = update_noise_floor(&floor, 0.01, DT, is_tonal = true)
+    testing.expectf(t, abs(floor.level - 0.01) < 1e-4, "hum, got %v", floor.level)
+    testing.expectf(t, abs(snr) < 1, "hum SNR, got %v dB", snr)
 }

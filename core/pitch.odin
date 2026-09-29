@@ -48,6 +48,7 @@ PitchInfo :: struct {
     err_cents:       f32,
     is_strong_pitch: bool,
     is_weak_pitch:   bool,
+    is_tonal:        bool, // a clear pitch whatever its level, the noise floors don't learn it as the background
     snr_db:          f32,
     noise_floor:     f32,
 }
@@ -109,7 +110,9 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(available) / f32(self.nsdf.samplerate)
-    self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt)
+    // A clear pitch is a note, not the background, even before the floor knows how loud that is
+    info.is_tonal = info.detected_freq >= MIN_DETECT_FREQ && info.clarity >= self.clarity_high
+    self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
     info.detected_note = find_note(info.detected_freq, self.pitch_standard)

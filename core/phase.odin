@@ -297,7 +297,16 @@ wrap_phase :: proc(phase: f64) -> f64 {
 }
 
 
-run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> (f32, f32, bool) {
+// is_tonal is a clear pitch from the pitch detection, the bands' noise floors don't learn it as the background
+run_phase_detection :: proc(
+    self: ^PhaseComparator,
+    use_phase_average: bool,
+    is_tonal := false,
+) -> (
+    f32,
+    f32,
+    bool,
+) {
     base_band := &self.bands[0]
 
     // Just the longest window, the lowest partial's, which isn't always the first track's.
@@ -328,7 +337,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> 
             continue
         }
         determine_band_phase(self, &band, band_idx, use_phase_average)
-        update_band_noise_floor(self, &band, band_idx)
+        update_band_noise_floor(self, &band, band_idx, is_tonal)
     }
 
     return base_band.estimated_freq_hz, base_band.err_cents, false
@@ -536,12 +545,12 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 
 @(private)
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
-update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
+update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int, is_tonal: bool) {
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
         dt := f32(self.available) / self.samplerate
         // The window starts out on the silence the sample buffer is filled with
         window_full := self.sample_clock >= i64(band.dft_config.window_size)
-        band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full)
+        band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full, is_tonal)
     } else {
         // Fine mode - only the base band needs to calculate the noise floor
         base_band := self.bands[0]

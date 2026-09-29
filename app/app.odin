@@ -257,7 +257,7 @@ run_app :: proc(config: ^Config) {
         record_trace(&cents_trace, traced_cents, pitch_info.fresh, gfx_frame_time())
 
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
-        core.run_phase_detection(phase_comparator, config.use_phase_average)
+        core.run_phase_detection(phase_comparator, config.use_phase_average, pitch_info.is_tonal)
 
 
         if key_pressed(.TAB) {
