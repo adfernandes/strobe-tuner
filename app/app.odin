@@ -229,9 +229,9 @@ run_app :: proc(config: ^Config) {
         if core.update_tuner(&tuner, pitch_info) do retune(phase_comparator, tuner.target_note.frequency, config)
 
         out_of_range := core.tuner_out_of_range(&tuner)
-        shown_pitch_info, shown_last_good_pitch_info := core.tuner_readout(&tuner)
+        shown_pitch_info, steady_pitch_info := core.tuner_readout(&tuner)
 
-        // The same cents as the readout, a gap while there's no pitch
+        // Every detection unaveraged so the vibrato shows, a gap while there's no pitch
         traced_cents := math.nan_f32()
         if tuner.active && !out_of_range do traced_cents = shown_pitch_info.err_cents
         record_trace(&cents_trace, traced_cents, pitch_info.fresh, gfx_frame_time())
@@ -383,10 +383,8 @@ run_app :: proc(config: ^Config) {
             draw_measurements(
                 layout.measurements,
                 layout.readout_align,
-                shown_pitch_info,
-                shown_last_good_pitch_info,
+                steady_pitch_info,
                 tuner.active,
-                out_of_range,
             )
 
 

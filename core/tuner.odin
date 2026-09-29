@@ -32,6 +32,7 @@ Tuner :: struct {
     active:               bool, // a pitch is being followed, until the detections turn weak
     pitch:                PitchInfo, // the latest detection
     last_good_pitch:      PitchInfo, // the latest strong detection
+    steady_freq:          f32, // the strong detections averaged for the readout, 0 before the first
 
     // the note seen in a row so far and how many times
     candidate_note:       Note,
@@ -71,6 +72,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo) -> (retune: bool) {
 
     // Keep the previous measurement while there is no detected note
     if pitch.is_strong_pitch {
+        if pitch.fresh do steady_readout(self, pitch.detected_freq)
         self.last_good_pitch = pitch
         if confirmed && self.detected_note.cents != pitch.detected_note.cents {
             self.detected_note = pitch.detected_note
@@ -92,6 +94,24 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo) -> (retune: bool) {
     if pitch.is_weak_pitch do self.active = false
 
     return
+}
+
+// A detection moves the readout a fraction of the way, about a quarter second to settle at 20 detections a second
+READOUT_SMOOTHING :: 0.2
+
+// Further than this from the readout is a new note or a turned peg, the readout jumps there instead of gliding
+READOUT_JUMP_CENTS :: 6
+
+// Averages the strong detections so the readout doesn't flicker with every one, a new pluck starts afresh
+@(private)
+steady_readout :: proc(self: ^Tuner, freq: f32) {
+    jump := self.steady_freq == 0 || !self.active || abs(cents_deviation(freq, self.steady_freq)) > READOUT_JUMP_CENTS
+    if jump {
+        self.steady_freq = freq
+    } else {
+        // In cents rather than Hz, the same smoothing for every note
+        self.steady_freq = cents_to_freq(READOUT_SMOOTHING * cents_deviation(freq, self.steady_freq), self.steady_freq)
+    }
 }
 
 // Unlocked, the target follows the detected note again
@@ -131,15 +151,16 @@ tuner_out_of_range :: proc(self: ^Tuner) -> bool {
     return !self.locked && self.detected_note.cents != self.target_note.cents
 }
 
-// The latest and the latest strong detection as the readout shows them, a locked note is measured against
-// the target instead of the nearest note
-tuner_readout :: proc(self: ^Tuner) -> (pitch, last_good_pitch: PitchInfo) {
+// The latest detection as it is, and the strong detections averaged for the readout. A locked note is
+// measured against the target instead of the nearest note.
+tuner_readout :: proc(self: ^Tuner) -> (pitch, steady_pitch: PitchInfo) {
     pitch = self.pitch
-    last_good_pitch = self.last_good_pitch
-    if self.locked {
-        pitch.err_cents = cents_deviation(pitch.detected_freq, self.target_note.frequency)
-        last_good_pitch.err_cents = cents_deviation(last_good_pitch.detected_freq, self.target_note.frequency)
-    }
+    steady_pitch = self.last_good_pitch
+    if self.steady_freq != 0 do steady_pitch.detected_freq = self.steady_freq
+
+    reference := self.target_note if self.locked else steady_pitch.detected_note
+    steady_pitch.err_cents = cents_deviation(steady_pitch.detected_freq, reference.frequency)
+    if self.locked do pitch.err_cents = cents_deviation(pitch.detected_freq, self.target_note.frequency)
     return
 }
 
@@ -197,4 +218,14 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, step_target_note(&tuner, -2))
     testing.expect(t, tuner.locked)
     testing.expect_value(t, tuner.target_note.name, 'G')
+
+    // The readout averages small wobbles, a bigger change jumps straight there
+    tuner = init_tuner(A2, 440, 1, true)
+    update_tuner(&tuner, detection(A2))
+    update_tuner(&tuner, detection(cents_to_freq(2, A2)))
+    _, steady := tuner_readout(&tuner)
+    testing.expect(t, steady.err_cents > 0.3 && steady.err_cents < 0.5)
+    update_tuner(&tuner, detection(cents_to_freq(20, A2)))
+    _, steady = tuner_readout(&tuner)
+    testing.expect(t, abs(steady.err_cents - 20) < 0.01)
 }

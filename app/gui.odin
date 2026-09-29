@@ -439,23 +439,12 @@ ReadoutAlign :: enum {
 draw_measurements :: proc(
     pos: [2]f32,
     align: ReadoutAlign,
-    pitch: core.PitchInfo,
-    last_good_pitch: core.PitchInfo,
+    steady_pitch: core.PitchInfo, // the strong detections averaged, a raw one each frame is too jumpy to read
     freq_estimation_active: bool,
-    out_of_range: bool,
 ) {
-    hz := pitch.detected_freq
-    cents := pitch.err_cents
-    show_placeholder := false
-
-    if !freq_estimation_active || out_of_range {
-        if last_good_pitch.measured {
-            hz = last_good_pitch.detected_freq
-            cents = last_good_pitch.err_cents
-        } else {
-            show_placeholder = true
-        }
-    }
+    hz := steady_pitch.detected_freq
+    cents := steady_pitch.err_cents
+    show_placeholder := !steady_pitch.measured
 
     color := text_color_white if freq_estimation_active else text_color_muted
     value := pixel_fonts.readout
