@@ -263,10 +263,10 @@ gui_track_settings :: proc(
     }
 
     {
-        // On top of the strobe speed, a high partial spins faster than the rest
+        // On top of the strobe speed, a high partial spins faster than the rest. In words, × is for partials.
         speeds := [?]f32{0.25, 0.5, 1, 2}
-        labels := []cstring{"¼×", "½×", "1×", "2×"}
-        rect := settings_row(l, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
+        labels := []cstring{"Slowest", "Slower", "Normal", "Faster"}
+        rect := settings_row(l, row, "Speed", f32(len(labels)) * 72)
         row += 1
         selected := -1
         for speed, i in speeds {
