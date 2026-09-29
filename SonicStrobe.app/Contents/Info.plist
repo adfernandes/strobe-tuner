@@ -9,12 +9,24 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>SonicStrobe</string>
+	<string>com.dsego.strobetuner</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.3</string>
 	<key>CFBundleVersion</key>
 	<string>1.3</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.music</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2025–2026 Davorin Šego</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs microphone access to function correctly.</string>
+	<string>The tuner listens to your instrument through the microphone.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

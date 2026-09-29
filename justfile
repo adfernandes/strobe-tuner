@@ -63,6 +63,10 @@ build target="": setup
 ipa: setup
     sh ios/build-device.sh
 
+# Signed .pkg for the Mac App Store: MAC_PROFILE=path/to/profile.provisionprofile just pkg
+pkg: setup
+    sh macos/build-pkg.sh
+
 # Runs the unit tests in core
 test:
     odin test core

@@ -141,8 +141,16 @@ cp "$ROOT/ios/Info.plist" "$APP/Info.plist"
 
 # The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
 xcrun actool "$ROOT/ios/Assets.xcassets" --compile "$APP" --platform iphonesimulator --minimum-deployment-target $MIN_IOS \
-    --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
+    --target-device iphone --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
 /usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
+
+# The acknowledgements show in the app's page in the Settings app, like on the device
+mkdir -p "$APP/Settings.bundle"
+cp "$ROOT/ios/Settings.bundle/Root.plist" "$APP/Settings.bundle/"
+ACKNOWLEDGEMENTS="$APP/Settings.bundle/Acknowledgements.plist"
+plutil -create xml1 "$ACKNOWLEDGEMENTS"
+plutil -insert PreferenceSpecifiers -json '[{"Type": "PSGroupSpecifier"}]' "$ACKNOWLEDGEMENTS"
+plutil -insert PreferenceSpecifiers.0.FooterText -string "$(cat "$ROOT/assets/Acknowledgements.txt")" "$ACKNOWLEDGEMENTS"
 
 codesign --force --sign - --timestamp=none "$APP"
 

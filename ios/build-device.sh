@@ -11,6 +11,7 @@
 #   SDL_VERSION=3.2.x         SDL release to build, defaults to the brew installed version
 #
 # An Ad Hoc .ipa also installs without Developer Mode, by dragging it onto the iPhone in Finder.
+# An App Store profile makes an .ipa for App Store Connect, upload it with the Transporter app.
 
 set -eu
 
@@ -149,9 +150,39 @@ esac
 
 # The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
 xcrun actool "$ROOT/ios/Assets.xcassets" --compile "$APP" --platform iphoneos --minimum-deployment-target $MIN_IOS \
-    --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
+    --target-device iphone --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
 /usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
 plutil -replace CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$APP/Info.plist"
+
+# Xcode records the SDK and itself in these, App Store Connect rejects uploads without them or with an old SDK.
+# The Xcode version is written without dots, 26.6 is 2660 and 16.4.1 is 1641.
+SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+SDK_BUILD=$(xcrun --sdk iphoneos --show-sdk-build-version)
+XCODE_VERSION=$(xcodebuild -version | awk 'NR == 1 { print $2 }')
+XCODE_BUILD=$(xcodebuild -version | awk 'NR == 2 { print $3 }')
+IFS=. read -r XCODE_MAJOR XCODE_MINOR XCODE_PATCH <<EOF
+$XCODE_VERSION
+EOF
+plutil -replace DTPlatformName -string iphoneos "$APP/Info.plist"
+plutil -replace DTPlatformVersion -string "$SDK_VERSION" "$APP/Info.plist"
+plutil -replace DTPlatformBuild -string "$SDK_BUILD" "$APP/Info.plist"
+plutil -replace DTSDKName -string "iphoneos$SDK_VERSION" "$APP/Info.plist"
+plutil -replace DTSDKBuild -string "$SDK_BUILD" "$APP/Info.plist"
+plutil -replace DTXcode -string "$XCODE_MAJOR${XCODE_MINOR:-0}${XCODE_PATCH:-0}" "$APP/Info.plist"
+plutil -replace DTXcodeBuild -string "$XCODE_BUILD" "$APP/Info.plist"
+plutil -replace DTCompiler -string com.apple.compilers.llvm.clang.1_0 "$APP/Info.plist"
+plutil -replace BuildMachineOSBuild -string "$(sw_vers -buildVersion)" "$APP/Info.plist"
+
+cp "$ROOT/ios/PrivacyInfo.xcprivacy" "$APP/"
+
+# The acknowledgements show in the app's page in the Settings app
+mkdir -p "$APP/Settings.bundle"
+cp "$ROOT/ios/Settings.bundle/Root.plist" "$APP/Settings.bundle/"
+ACKNOWLEDGEMENTS="$APP/Settings.bundle/Acknowledgements.plist"
+plutil -create xml1 "$ACKNOWLEDGEMENTS"
+plutil -insert PreferenceSpecifiers -json '[{"Type": "PSGroupSpecifier"}]' "$ACKNOWLEDGEMENTS"
+plutil -insert PreferenceSpecifiers.0.FooterText -string "$(cat "$ROOT/assets/Acknowledgements.txt")" "$ACKNOWLEDGEMENTS"
+
 cp "$IOS_PROFILE" "$APP/embedded.mobileprovision"
 
 # Only development profiles allow attaching a debugger
