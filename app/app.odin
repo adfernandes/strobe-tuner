@@ -395,11 +395,21 @@ run_app :: proc(config: ^Config) {
 
             // The lock button (or space) locks the note, tapping another note on the ruler (or the arrows)
             // locks that one instead
+            // A transposing instrument reads the written note, only what's shown moves, the steps are
+            // relative and work the same either way
+            config.transpose = gui_transpose(layout.transpose, ((config.transpose % 12) + 12) % 12)
+            shown_note := core.cents_to_note(
+                f32(tuner.target_note.cents + 100 * config.transpose),
+                tuner.target_note.pitch_standard,
+            )
+            // No pitch yet, nothing to show
+            if tuner.target_note.frequency == 0 do shown_note.frequency = 0
+
             step: int
             if config.chromatic_ruler {
-                step = gui_note_ruler(layout.ruler, tuner.target_note, tuner.active)
+                step = gui_note_ruler(layout.ruler, shown_note, tuner.active)
             } else {
-                draw_note(tuner.target_note, layout.note, tuner.active)
+                draw_note(shown_note, layout.note, tuner.active)
                 step = gui_note_arrows(layout.note, tuner.locked)
             }
             lock_toggled := gui_lock_toggle(layout.lock, tuner.locked)

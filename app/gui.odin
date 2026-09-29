@@ -50,7 +50,18 @@ gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: Color) -> b
     LABEL_GAP :: 10
     TOUCH_HEIGHT :: 44
 
-    led := Rect{pos.x, pos.y - LED_SIZE / 2, LED_SIZE, LED_SIZE}
+    draw_led({pos.x, pos.y - LED_SIZE / 2, LED_SIZE, LED_SIZE}, on, color)
+
+    label_x := pos.x + LED_SIZE + LABEL_GAP
+    label_width := measure_label(pixel_fonts.label, label, 1).x
+    draw_label(pixel_fonts.label, label, {label_x, pos.y - 7}, text_color_white if on else text_color_light, 1)
+
+    // The whole of the LED and the label, a little past them on each side
+    width := label_x + label_width - pos.x
+    return gui_button({pos.x - 12, pos.y - TOUCH_HEIGHT / 2, width + 24, TOUCH_HEIGHT})
+}
+
+draw_led :: proc(led: Rect, on: bool, color: Color) {
     if on {
         // A thin ring of light, stepped down over a few points
         for ring in ([2][2]f32{{3, 50}, {1.5, 110}}) {
@@ -60,14 +71,6 @@ gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: Color) -> b
         }
     }
     draw_pill(led, color if on else pill_dark)
-
-    label_x := pos.x + LED_SIZE + LABEL_GAP
-    label_width := measure_label(pixel_fonts.label, label, 1).x
-    draw_label(pixel_fonts.label, label, {label_x, pos.y - 7}, text_color_white if on else text_color_light, 1)
-
-    // The whole of the LED and the label, a little past them on each side
-    width := label_x + label_width - pos.x
-    return gui_button({pos.x - 12, pos.y - TOUCH_HEIGHT / 2, width + 24, TOUCH_HEIGHT})
 }
 
 LOCK_BUTTON_HEIGHT :: 24
@@ -87,6 +90,52 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
     draw_label(pixel_fonts.label, LABEL, center - label_size / 2, text_color_dark, 1)
 
     return gui_button({rect.x, center.y - TOUCH_HEIGHT / 2, rect.width, TOUCH_HEIGHT})
+}
+
+// The key of a transposing instrument: an LED and the label like the FAST toggle, then the key between −
+// and + that step it. The LED lights in any key but C so it isn't left on by mistake, tapping it or the
+// label goes back to C. pos is the left edge, vertically centred. Returns the new transpose, see
+// Config.transpose.
+gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
+    // A Bb instrument sounds a tone below the written note, the note shows 2 semitones up
+    KEYS :: [12]cstring{"C", "B", "Bb", "A", "Ab", "G", "Gb", "F", "E", "Eb", "D", "Db"}
+    LED_SIZE :: 8
+    LABEL_GAP :: 10
+    STEPPER_GAP :: 18 // from the label to the −
+    KEY_SLOT :: 36 // between the − and +, wide enough for "Bb" without them moving
+    STEP_TOUCH :: 36
+    TOUCH_HEIGHT :: 44
+
+    keys := KEYS
+    on := transpose != 0
+
+    draw_led({pos.x, pos.y - LED_SIZE / 2, LED_SIZE, LED_SIZE}, on, pill_yellow)
+    label_x := pos.x + LED_SIZE + LABEL_GAP
+    label_width := measure_label(pixel_fonts.label, "TRANSPOSE", 1).x
+    draw_label(pixel_fonts.label, "TRANSPOSE", {label_x, pos.y - 7}, text_color_white if on else text_color_light, 1)
+
+    // − and the key and + after the label
+    font := pixel_fonts.label_large
+    minus_x := label_x + label_width + STEPPER_GAP
+    minus_size := measure_label(font, "−")
+    plus_size := measure_label(font, "+")
+    key_size := measure_label(font, keys[transpose])
+    key_center := minus_x + minus_size.x + KEY_SLOT / 2
+    plus_x := minus_x + minus_size.x + KEY_SLOT
+    text_y := pos.y - key_size.y / 2
+    draw_label(font, "−", {minus_x, text_y}, text_color_light)
+    draw_label(font, keys[transpose], {key_center - key_size.x / 2, text_y}, text_color_white)
+    draw_label(font, "+", {plus_x, text_y}, text_color_light)
+
+    // Down a key is up a semitone on the note
+    top := pos.y - TOUCH_HEIGHT / 2
+    minus_center := minus_x + minus_size.x / 2
+    plus_center := plus_x + plus_size.x / 2
+    if gui_button({minus_center - STEP_TOUCH / 2, top, STEP_TOUCH, TOUCH_HEIGHT}) do return (transpose + 1) % 12
+    if gui_button({plus_center - STEP_TOUCH / 2, top, STEP_TOUCH, TOUCH_HEIGHT}) do return (transpose + 11) % 12
+    // The LED and the label, up to the − touch area
+    if gui_button({pos.x - 12, top, minus_center - STEP_TOUCH / 2 - pos.x + 12, TOUCH_HEIGHT}) do return 0
+    return transpose
 }
 
 

@@ -31,6 +31,7 @@ Layout :: struct {
     readout_align:  ReadoutAlign,
     stats:          [2]f32,
     lock:           [2]f32, // the middle of the button
+    transpose:      [2]f32, // left edge of the LED, the middle of the two lines
     response:       [2]f32, // hidden with the trace
     level_meter:    [2]f32, // left of the icon, top of the bar
     settings:       [2]f32,
@@ -95,7 +96,8 @@ portrait_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) 
 }
 
 // The same on the desktop and a phone: the response and the level meter in a row just under the strobe,
-// the note with the readout above it, and the lock and the settings in a row under it
+// the note with the readout above it and the lock under it, and the transpose and the settings in the
+// bottom corners
 @(private = "file")
 panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_scale: f32) {
     panel := l.strobe.y + l.strobe.height
@@ -105,10 +107,10 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
     l.response = {left, panel + 20}
     l.level_meter = {right - LEVEL_METER_WIDTH, l.response.y - 2}
 
-    defer {
-        // Opposite the lock, lined up with it
-        l.settings = {right - SETTINGS_ICON_SIZE, l.lock.y - SETTINGS_ICON_SIZE / 2}
-    }
+    // A row along the bottom like the one under the strobe
+    corners := bottom - SETTINGS_ICON_SIZE / 2
+    l.transpose = {left, corners}
+    l.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
 
     if ruler {
         // The readout above the note and the lock under it, the three centred together in the panel.

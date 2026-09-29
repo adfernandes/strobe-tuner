@@ -93,6 +93,9 @@ Config :: struct {
     // all the notes in a sliding row, off shows just the note with arrows either side to step it
     chromatic_ruler:              bool,
 
+    // semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2, see gui_transpose
+    transpose:                    int,
+
     // pitch detection settings
     pitch_detection_clarity_low:  f32,
     pitch_detection_clarity_high: f32,
@@ -133,6 +136,7 @@ config_defaults :: Config {
     prevent_strobe_octave_jumps  = true,
     partial_labels               = .MULTIPLES,
     chromatic_ruler              = true,
+    transpose                    = 0,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
