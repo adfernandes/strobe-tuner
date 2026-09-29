@@ -2,8 +2,8 @@
 # Build the Mac app for the Mac App Store, sign it with the given provisioning profile and package it as a .pkg
 # for App Store Connect, upload it with the Transporter app.
 #
-# The bundle is assembled in build/macos from the Info.plist and entitlements in SonicStrobe.app, the icon is
-# made from AppIcon.iconset.
+# The bundle is assembled in build/macos from the Info.plist, credits and entitlements next to this script, the
+# icon is made from AppIcon.iconset. The bundle is named after CFBundleName in the Info.plist.
 #
 #   MAC_PROFILE=<path>              Mac App Store provisioning profile (.provisionprofile), required,
 #                                   the bundle id and team come from it
@@ -14,8 +14,9 @@ set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT="$ROOT/build/macos"
-APP="$OUT/SonicStrobe.app"
-PKG="$OUT/SonicStrobe.pkg"
+NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ROOT/macos/Info.plist")
+APP="$OUT/$NAME.app"
+PKG="$OUT/$NAME.pkg"
 MIN_MACOS=11.0
 
 if [ -z "${MAC_PROFILE:-}" ] || [ ! -f "$MAC_PROFILE" ]; then
@@ -29,8 +30,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 echo "Compiling app"
 odin build "$ROOT/app" -o:speed -minimum-os-version:$MIN_MACOS -out:"$APP/Contents/MacOS/app.bin"
 
-cp "$ROOT/SonicStrobe.app/Contents/Info.plist" "$APP/Contents/Info.plist"
-cp "$ROOT/SonicStrobe.app/Contents/Resources/Credits.rtf" "$APP/Contents/Resources/"
+cp "$ROOT/macos/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/macos/Credits.rtf" "$APP/Contents/Resources/"
 cp "$ROOT/assets/Acknowledgements.txt" "$APP/Contents/Resources/"
 # The App Store wants the 1024px icon_512x512@2x.png in the set
 iconutil -c icns "$ROOT/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
@@ -44,7 +45,7 @@ plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP/Contents/Info.plis
 cp "$MAC_PROFILE" "$APP/Contents/embedded.provisionprofile"
 
 # The sandbox and microphone entitlements, plus the app and team ids the profile allows
-cp "$ROOT/SonicStrobe.app/Contents/SonicStrobe.entitlements" "$OUT/entitlements.plist"
+cp "$ROOT/macos/app.entitlements" "$OUT/entitlements.plist"
 /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $APP_ID" "$OUT/entitlements.plist"
 /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string $TEAM_ID" "$OUT/entitlements.plist"
 

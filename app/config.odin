@@ -142,7 +142,7 @@ get_config_defaults :: proc() -> Config {
     return config_defaults
 }
 
-// Load config from the standard OS path, eg ~/Library/Application Support/SonicStrobe/config.ini on MacOS, see get_config_directory.
+// Load config from the standard OS path, eg ~/Library/Application Support/<APP_NAME>/config.ini on MacOS, see get_config_directory.
 load_config :: proc() -> Config {
 
     config := get_config_defaults()

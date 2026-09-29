@@ -17,7 +17,7 @@
 
 package app
 
-APP_NAME :: "SonicStrobe"
+APP_NAME :: "Strobie"
 
 // Strobe display layout dimensions
 STROBE_WIDTH :: 488

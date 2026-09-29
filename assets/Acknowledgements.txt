@@ -1,9 +1,9 @@
-SonicStrobe
+Strobie
 Copyright (C) 2025-2026 Davorin Šego
 Licensed under the GNU General Public License v3
 https://github.com/dsego/strobe-tuner
 
-SonicStrobe is built with the following third-party software.
+Strobie is built with the following third-party software.
 
 
 PortAudio (ring buffer)

@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>SonicStrobe</string>
+	<string>Strobie</string>
 	<key>CFBundleExecutable</key>
 	<string>app.bin</string>
 	<key>CFBundleIconFile</key>

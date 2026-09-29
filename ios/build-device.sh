@@ -19,7 +19,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 DEPS="$ROOT/external/ios-device"
 OUT="$ROOT/build/ios-device"
 APP="$OUT/Payload/StrobeTuner.app"
-IPA="$OUT/SonicStrobe.ipa"
+IPA="$OUT/StrobeTuner.ipa"
 MIN_IOS=15.0
 TARGET="arm64-apple-ios$MIN_IOS"
 

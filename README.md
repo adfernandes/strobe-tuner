@@ -1,15 +1,15 @@
 <div align="center">
   
-# SonicStrobe
+# Strobie
 
 A simple stroboscopic instrument tuner.
 
-<img src="docs/demo.webp" width="300" alt="SonicStrobe tuning a G3">
+<img src="docs/demo.webp" width="300" alt="Strobie tuning a G3">
 
 </div>
 
 
-SonicStrobe is on the App Store for Mac and iPhone. The source is here to read and build yourself, see [Development](#development).
+Strobie is on the App Store for Mac and iPhone. The source is here to read and build yourself, see [Development](#development).
 
 ### Features
 
@@ -111,7 +111,7 @@ sudo dnf install clang git libX11-devel  # Fedora
 just dev
 ```
 
-The config is saved to `$XDG_CONFIG_HOME/SonicStrobe/config.ini`, or `~/.config/SonicStrobe/config.ini`.
+The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Strobie/config.ini`.
 
 
 ### How it works
