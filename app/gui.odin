@@ -121,7 +121,7 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
         offset := fmt.ctprintf("%+.1f¢", band.offset_cents)
         offset_size := measure_label(offset_font, offset)
         center_y := bounds.y + text_size.y / 2
-        draw_label(offset_font, offset, {bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}, text_color_light)
+        draw_label(offset_font, offset, {bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}, hex(0x82E2FFFF))
     }
 }
 

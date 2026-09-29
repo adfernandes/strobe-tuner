@@ -212,7 +212,7 @@ gui_track_settings :: proc(
     )
     title_size := measure_label(pixel_fonts.title, title, 1)
     details_y := l.title.y + (title_size.y - LABEL_SIZE) / 2
-    draw_label(pixel_fonts.label, details, {l.title.x + title_size.x + 12, details_y}, text_color_muted, 1)
+    draw_label(pixel_fonts.label, details, {l.title.x + title_size.x + 12, details_y}, text_color_light, 1)
 
     draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
     if gui_button(l.close) do close = true
@@ -231,7 +231,7 @@ gui_track_settings :: proc(
         rect := settings_row(l, row, "Partial", 176)
         row += 1
         partial := config.strobe_intervals[slot]
-        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%v×", partial))
+        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%v", partial), times = true)
         if reset {
             partial = preset_partial
         } else if steps != 0 {
@@ -389,9 +389,10 @@ gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: st
     return value, false
 }
 
-// The - and + around label, returns the steps taken or reset when the label is double clicked
+// The - and + around label, times puts a × after it. Returns the steps taken or reset when the label is
+// double clicked.
 @(private = "file")
-gui_stepper_buttons :: proc(rect: Rect, label: cstring) -> (steps: f32, reset: bool) {
+gui_stepper_buttons :: proc(rect: Rect, label: cstring, times := false) -> (steps: f32, reset: bool) {
     draw_pill(rect, pill_dark)
 
     button_width: f32 = 44
@@ -400,7 +401,18 @@ gui_stepper_buttons :: proc(rect: Rect, label: cstring) -> (steps: f32, reset: b
 
     icon_offset := [2]f32{(button_width - 16) / 2, (rect.height - 16) / 2}
     draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, icon_color)
-    draw_centered_label(label, rect, text_color_white)
+    if times {
+        // The larger × centred on the same line as the digits, the pair centred together
+        TIMES :: "×"
+        label_width := measure_label(pixel_fonts.label, label, 1).x
+        times_width := measure_label(pixel_fonts.label_times, TIMES).x
+        x := rect.x + (rect.width - label_width - times_width) / 2
+        y := rect.y + (rect.height - LABEL_SIZE) / 2
+        draw_label(pixel_fonts.label, label, {x, y}, text_color_white, 1)
+        draw_label(pixel_fonts.label_times, TIMES, {x + label_width, y - (LABEL_TIMES_SIZE - LABEL_SIZE) / 2}, text_color_white)
+    } else {
+        draw_centered_label(label, rect, text_color_white)
+    }
     draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
 
     if gui_button(touch_area(minus)) do return -1, false

@@ -40,6 +40,7 @@ ICON_CODEPOINTS :: "\ue432"
 LABEL_SIZE :: 14 // the controls and most of the text
 LABEL_LARGE_SIZE :: 16
 LABEL_SMALL_SIZE :: 12 // the debug stats
+LABEL_TIMES_SIZE :: 18 // the × as large as the body of a ¢ in a label
 TITLE_SIZE :: 18
 ICON_SIZE :: 16
 ICON_LARGE_SIZE :: 24
@@ -69,6 +70,7 @@ PixelFonts :: struct {
     label:           PixelFont,
     label_large:     PixelFont,
     label_small:     PixelFont,
+    label_times:     PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
     title:           PixelFont,
     icon:            PixelFont,
     icon_large:      PixelFont,
@@ -109,6 +111,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         label           = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
         label_large     = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
         label_small     = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
+        label_times     = load(inter_medium, LABEL_TIMES_SIZE, scale, "×"),
         title           = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
         icon            = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
         icon_large      = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
@@ -131,6 +134,7 @@ unload_pixel_fonts :: proc() {
     gfx_unload_font(pixel_fonts.label.font)
     gfx_unload_font(pixel_fonts.label_large.font)
     gfx_unload_font(pixel_fonts.label_small.font)
+    gfx_unload_font(pixel_fonts.label_times.font)
     gfx_unload_font(pixel_fonts.title.font)
     gfx_unload_font(pixel_fonts.icon.font)
     gfx_unload_font(pixel_fonts.icon_large.font)
