@@ -317,6 +317,7 @@ draw_strobe_display :: proc(
                 {rect.x + rect.width - 12, y + band_height * (f32(order) + 0.6) + r - sin},
                 config.partial_labels,
                 band,
+                band_height,
             )
             if changed {
                 config.partial_labels = partial_labels

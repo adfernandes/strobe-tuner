@@ -90,10 +90,12 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
 }
 
 
+// touch_height is the height of the band, the labels are a band apart so their touch areas don't overlap
 gui_strobe_partial :: proc(
     position: [2]f32,
     type: PartialLabelType,
     band: core.PhaseBand,
+    touch_height: f32,
 ) -> (
     PartialLabelType,
     bool,
@@ -122,7 +124,15 @@ gui_strobe_partial :: proc(
 
     draw_label(font, text, {bounds.x, bounds.y}, hex(0x82E2FFFF))
 
-    if gui_button(bounds) {
+    // The text is much smaller than a finger, the touch area is as tall as the band, at least a finger wide
+    // and reaches past the right aligned text to the edge of the strobe
+    TOUCH_MIN_WIDTH :: 44
+    RIGHT_MARGIN :: 12
+    touch_width := max(text_size.x, TOUCH_MIN_WIDTH) + RIGHT_MARGIN
+    center_y := bounds.y + text_size.y / 2
+    touch := Rect{position.x + RIGHT_MARGIN - touch_width, center_y - touch_height / 2, touch_width, touch_height}
+
+    if gui_button(touch) {
         if type == .MULTIPLES do return .FREQUENCY, true
         else if type == .FREQUENCY do return .NOTE_NAMES, true
         return .MULTIPLES, true
