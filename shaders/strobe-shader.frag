@@ -31,7 +31,7 @@ const float TAU = radians(360);
 const float DARK_TRANSMISSION = 0.3;
 
 // The selected track: its outline along both edges, inside the track, and how much the others darken
-const float OUTLINE_WIDTH = 2.0;
+const float OUTLINE_WIDTH = 1.0;
 const float DIM_AMOUNT = 0.65;
 
 // Uniforms
@@ -233,11 +233,14 @@ void main()
         rgb = mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, glow_saturation);
     }
 
-    // The outline follows the arc, the distance to the nearer edge of the track
+    // The outline follows the arc, the distance to the nearer edge of the track. The edges are where the
+    // feathering is halfway, the outer one fades inside the radius and the inner one outside it.
     if (highlight > 0.0) {
         float radial_position = length(distance);
-        float edge = min(radial_position - (curvature_radius - thickness), curvature_radius - radial_position);
-        float outline = 1.0 - smoothstep(OUTLINE_WIDTH, OUTLINE_WIDTH + 1.0, edge);
+        float outer_edge = curvature_radius - 0.5 * feathering;
+        float inner_edge = curvature_radius - thickness - 0.5 * feathering;
+        float edge = min(radial_position - inner_edge, outer_edge - radial_position);
+        float outline = 1.0 - smoothstep(OUTLINE_WIDTH - 0.5, OUTLINE_WIDTH + 0.5, edge);
         rgb = mix(rgb, highlight_color.rgb, highlight * outline);
     }
     rgb *= 1.0 - DIM_AMOUNT * dim;

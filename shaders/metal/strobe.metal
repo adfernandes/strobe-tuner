@@ -61,7 +61,7 @@ constant float TAU = 6.28318530717958647692;
 constant float DARK_TRANSMISSION = 0.3;
 
 // The selected track: its outline along both edges, inside the track, and how much the others darken
-constant float OUTLINE_WIDTH = 2.0;
+constant float OUTLINE_WIDTH = 1.0;
 constant float DIM_AMOUNT = 0.65;
 
 
@@ -227,11 +227,14 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
         rgb = mix(float3(dot(rgb, float3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
     }
 
-    // The outline follows the arc, the distance to the nearer edge of the track
+    // The outline follows the arc, the distance to the nearer edge of the track. The edges are where the
+    // feathering is halfway, the outer one fades inside the radius and the inner one outside it.
     if (u.highlight > 0.0) {
         float radial_position = length(distance);
-        float edge = min(radial_position - (u.curvature_radius - thickness), u.curvature_radius - radial_position);
-        float outline = 1.0 - smoothstep(OUTLINE_WIDTH, OUTLINE_WIDTH + 1.0, edge);
+        float outer_edge = u.curvature_radius - 0.5 * feathering;
+        float inner_edge = u.curvature_radius - thickness - 0.5 * feathering;
+        float edge = min(radial_position - inner_edge, outer_edge - radial_position);
+        float outline = 1.0 - smoothstep(OUTLINE_WIDTH - 0.5, OUTLINE_WIDTH + 0.5, edge);
         rgb = mix(rgb, u.highlight_color.rgb, u.highlight * outline);
     }
     rgb *= 1.0 - DIM_AMOUNT * u.dim;
