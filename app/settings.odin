@@ -93,10 +93,16 @@ gui_settings :: proc(
         labels := []cstring{"1 2 4", "1 1½ 2", "1 2 3"}
         rect := settings_row(l, row, "Harmonics", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
-        // None selected once a track follows another partial
+        // None selected once a track is changed in its sheet, tapping a preset then resets all the tracks
         options := INTERVAL_OPTIONS
+        defaults := get_config_defaults()
         preset := config.strobe_intervals_index
-        if preset < 0 || preset >= len(options) || config.strobe_intervals != options[preset] do preset = -1
+        if preset < 0 || preset >= len(options) ||
+           config.strobe_intervals != options[preset] ||
+           config.strobe_offsets_cents != defaults.strobe_offsets_cents ||
+           config.strobe_speeds != defaults.strobe_speeds {
+            preset = -1
+        }
         if i, ok := gui_segmented(rect, labels, preset); ok {
             apply_interval_preset(config, i)
             changed = true
