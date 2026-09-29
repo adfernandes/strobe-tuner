@@ -95,6 +95,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just dev sdl` | The same with the SDL3 GPU renderer and Metal shaders, needs `brew install sdl3` |
 | `just dev stats` | Also shows the signal stats and NSDF plots |
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
+| `just ipa` | Signed build for iPhone, see `ios/build-device.sh`, needs Xcode and a provisioning profile |
 | `just build`, `just build sdl` | Optimized build with either renderer |
 | `just test` | Unit tests of the pitch detection and strobe code |
 

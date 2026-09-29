@@ -59,6 +59,10 @@ build target="": setup
         *) echo "Unknown target '{{target}}', use sdl"; exit 1 ;;
     esac
 
+# Signed .ipa for iPhone: IOS_PROFILE=path/to/profile.mobileprovision [IOS_DEVICE=<name>] just ipa
+ipa: setup
+    sh ios/build-device.sh
+
 # Runs the unit tests in core
 test:
     odin test core

@@ -1,24 +1,29 @@
 #!/usr/bin/env sh
-# Build the SDL renderer for the iOS simulator, install it on a simulator and run it with the console attached.
+# Build the SDL renderer for iPhone, sign it with the given provisioning profile and package it as an .ipa.
 #
-# The native libraries (SDL3, miniaudio, stb, pffft, pa_ringbuffer) are rebuilt for the simulator once,
-# into external/ios-sim. Odin only emits an object file, clang links it into the app bundle.
+# The native libraries (SDL3, miniaudio, stb, pffft, pa_ringbuffer) are rebuilt for the device once,
+# into external/ios-device. Odin only emits an object file, clang links it into the app bundle.
 #
-#   IOS_SIM=<udid or name>   simulator to use, defaults to the booted one or the first available iPhone
-#   SDL_VERSION=3.2.x        SDL release to build, defaults to the brew installed version
+#   IOS_PROFILE=<path>        provisioning profile, required, the bundle id and entitlements come from it
+#   IOS_SIGN_IDENTITY=<name>  signing certificate, defaults to "Apple Development" for a development profile
+#                             (e.g. a free Personal Team) and "Apple Distribution" for an Ad Hoc one
+#   IOS_DEVICE=<name or udid> installs and launches the app on this iPhone, needs Developer Mode on it
+#   SDL_VERSION=3.2.x         SDL release to build, defaults to the brew installed version
+#
+# An Ad Hoc .ipa also installs without Developer Mode, by dragging it onto the iPhone in Finder.
 
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-DEPS="$ROOT/external/ios-sim"
-OUT="$ROOT/build/ios-sim"
-APP="$OUT/StrobeTuner.app"
-BUNDLE_ID=com.dsego.strobetuner
+DEPS="$ROOT/external/ios-device"
+OUT="$ROOT/build/ios-device"
+APP="$OUT/Payload/StrobeTuner.app"
+IPA="$OUT/SonicStrobe.ipa"
 MIN_IOS=15.0
-TARGET="arm64-apple-ios$MIN_IOS-simulator"
+TARGET="arm64-apple-ios$MIN_IOS"
 
 ODIN_ROOT=$(odin root)
-CC="xcrun -sdk iphonesimulator clang -target $TARGET"
+CC="xcrun -sdk iphoneos clang -target $TARGET"
 CFLAGS="-O2 -fPIC"
 
 mkdir -p "$DEPS" "$OUT"
@@ -62,26 +67,11 @@ if [ ! -d "$DEPS/SDL" ]; then
     git clone --depth 1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$DEPS/SDL"
 fi
 
-# Local patch: SDL_GPU requires the Apple3 GPU family on iOS, the simulator only reports Apple2
-SDL_METAL="$DEPS/SDL/src/gpu/metal/SDL_gpu_metal.m"
-if ! grep -q 'MTLGPUFamilyApple3\] || TARGET_OS_SIMULATOR' "$SDL_METAL"; then
-    echo "Patching SDL_GPU Metal to allow the simulator"
-    sed -i '' 's/\[device supportsFamily:MTLGPUFamilyApple3\];/[device supportsFamily:MTLGPUFamilyApple3] || TARGET_OS_SIMULATOR;/' "$SDL_METAL"
-fi
-
-# Local patch: the simulator doesn't support depth clip mode, skip it like on visionOS
-if ! grep -q 'SDL_PLATFORM_VISIONOS) && !TARGET_OS_SIMULATOR' "$SDL_METAL"; then
-    echo "Patching SDL_GPU Metal to skip depth clip mode on the simulator"
-    # Only the #ifndef directly above a setDepthClipMode call
-    sed -i '' '/^#ifndef SDL_PLATFORM_VISIONOS$/{N;/setDepthClipMode/s/^#ifndef SDL_PLATFORM_VISIONOS/#if !defined(SDL_PLATFORM_VISIONOS) \&\& !TARGET_OS_SIMULATOR/;}' "$SDL_METAL"
-fi
-
-# Rebuild when the source was patched after the last build
-if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ] || [ "$SDL_METAL" -nt "$DEPS/SDL/build/libSDL3.a" ]; then
+if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
     echo "Building SDL"
     cmake -S "$DEPS/SDL" -B "$DEPS/SDL/build" \
         -DCMAKE_SYSTEM_NAME=iOS \
-        -DCMAKE_OSX_SYSROOT=iphonesimulator \
+        -DCMAKE_OSX_SYSROOT=iphoneos \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
         -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS \
         -DCMAKE_BUILD_TYPE=Release \
@@ -101,11 +91,11 @@ odin build "$ROOT/app" \
     -build-mode:obj \
     -use-single-module \
     -target:darwin_arm64 \
-    -subtarget:iphonesimulator \
+    -subtarget:iphone \
     -minimum-os-version:$MIN_IOS \
     -define:RENDERER=sdl \
     -define:IOS=true \
-    -debug \
+    -o:speed \
     -out:"$OUT/app.o"
 
 echo "Linking"
@@ -137,29 +127,46 @@ $CC -ObjC \
     -framework UniformTypeIdentifiers \
     -o "$APP/StrobeTuner"
 
-cp "$ROOT/ios/Info.plist" "$APP/Info.plist"
+# --- signing -----------------------------------------------------------------------------------
 
-# The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
-xcrun actool "$ROOT/ios/Assets.xcassets" --compile "$APP" --platform iphonesimulator --minimum-deployment-target $MIN_IOS \
-    --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
-/usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
-
-codesign --force --sign - --timestamp=none "$APP"
-
-# --- simulator ---------------------------------------------------------------------------------
-
-UDID_PATTERN='[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}'
-DEVICE=${IOS_SIM:-$(xcrun simctl list devices booted | grep -o "$UDID_PATTERN" | head -1)}
-if [ -z "$DEVICE" ]; then
-    DEVICE=$(xcrun simctl list devices available | grep 'iPhone' | grep -o "$UDID_PATTERN" | head -1)
-fi
-if [ -z "$DEVICE" ]; then
-    echo "No iPhone simulator found, install one in Xcode > Settings > Components"
+if [ -z "${IOS_PROFILE:-}" ] || [ ! -f "$IOS_PROFILE" ]; then
+    echo "Set IOS_PROFILE to the Ad Hoc provisioning profile (.mobileprovision)"
     exit 1
 fi
 
-xcrun simctl boot "$DEVICE" 2>/dev/null || true
-open -a Simulator
-xcrun simctl install "$DEVICE" "$APP"
-echo "Launching, Ctrl+C to detach"
-xcrun simctl launch --console-pty --terminate-running-process "$DEVICE" "$BUNDLE_ID"
+# The entitlements and the bundle id come from the profile, its application-identifier is <team id>.<bundle id>
+security cms -D -i "$IOS_PROFILE" > "$OUT/profile.plist"
+/usr/libexec/PlistBuddy -x -c 'Print :Entitlements' "$OUT/profile.plist" > "$OUT/entitlements.plist"
+APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$OUT/profile.plist")
+BUNDLE_ID=${APP_ID#*.}
+
+cp "$ROOT/ios/Info.plist" "$APP/Info.plist"
+# A wildcard profile (<team id>.*) signs any bundle id, keep the one in Info.plist
+case "$BUNDLE_ID" in
+    *'*'*) BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist") ;;
+    *) plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP/Info.plist" ;;
+esac
+
+# The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
+xcrun actool "$ROOT/ios/Assets.xcassets" --compile "$APP" --platform iphoneos --minimum-deployment-target $MIN_IOS \
+    --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
+/usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
+plutil -replace CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$APP/Info.plist"
+cp "$IOS_PROFILE" "$APP/embedded.mobileprovision"
+
+# Only development profiles allow attaching a debugger
+if [ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$OUT/profile.plist" 2>/dev/null)" = true ]; then
+    DEFAULT_IDENTITY="Apple Development"
+else
+    DEFAULT_IDENTITY="Apple Distribution"
+fi
+codesign --force --sign "${IOS_SIGN_IDENTITY:-$DEFAULT_IDENTITY}" --entitlements "$OUT/entitlements.plist" "$APP"
+
+# An .ipa is a zip with the app inside a Payload folder
+ditto -c -k --keepParent "$OUT/Payload" "$IPA"
+echo "Built $IPA ($BUNDLE_ID)"
+
+if [ -n "${IOS_DEVICE:-}" ]; then
+    xcrun devicectl device install app --device "$IOS_DEVICE" "$APP"
+    xcrun devicectl device process launch --device "$IOS_DEVICE" "$BUNDLE_ID"
+fi
