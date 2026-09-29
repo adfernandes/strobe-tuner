@@ -9,9 +9,7 @@ A simple stroboscopic instrument tuner.
 </div>
 
 
-### Download
-
-[Latest release on GitHub](https://github.com/dsego/strobe-tuner/releases)
+SonicStrobe is on the App Store for Mac and iPhone. The source is here to read and build yourself, see [Development](#development).
 
 ### Features
 
@@ -143,9 +141,18 @@ In automatic mode a newly detected note has to be seen several times in a row (3
 
 #### Alternative approaches I have tried
 
-- Time-aligned windowing with resampling - emulates a classic untriggered oscilloscope synced to the signal’s period. This approach required resampling and IIR bandpass filtering for each strobe band. The visual resolution was tied to the number of samples per cycle, fewer samples per period resulted in blocky motion. The visual sensitivity couldn’t be adjusted. A strong bandpass filter introduced latency, but without it the harmonics would bleed into the strobe pattern.
+Before the lock-in, I drew the strobe from the waveform itself, like an untriggered oscilloscope with its sweep synced to the reference period, so a detuned note drifts sideways:
 
-- Time-aligned windowing with sub-sample frame counter - instead of resampling, this approach maintains alignment by advancing a fractional counter and rounding the number of samples per frame up or down. Still requires a bandpass filter and interpolation at display or window boundaries.
+- Time-aligned windowing with resampling - each band resampled so that one reference period fills the pattern.
+- Time-aligned windowing with a sub-sample frame counter - instead of resampling, a fractional counter keeps the alignment and the number of samples per frame is rounded up or down.
+
+Both ran into the same problems, which the lock-in doesn't have:
+
+- Sensitivity: the drift is the actual phase the signal slips against the reference, so it can't be made slower or faster. The lock-in measures that phase, and the strobe turns by the phase times any factor, which is what the strobe response setting and the fine mode are built on.
+- Shimmer: rounding each frame to whole samples moves the pattern by up to half a sample per frame. High notes have few samples per period, 12 at 4 kHz, so that's 15° of jitter. Resampling avoided the rounding, but with few samples per period the motion was blocky. The lock-in phase is continuous and the phase tracker smooths it, so the stripes move smoothly at any pitch.
+- Band filters: each band needed an IIR bandpass, otherwise the other harmonics bled into its pattern. A narrow IIR shifts the phase steeply around its centre frequency, differently in each band, so the tracks were offset from each other and reacted at different speeds when the pitch moved, e.g. a pluck gliding down from sharp. The single-bin DFT is just as narrow a bandpass, but its window is symmetric, so its phase is linear, a plain delay with no phase distortion in any band.
+
+A narrow filter takes time either way: the DFT window is about 0.6 s at 110 Hz, so the phase shown is from about 0.3 s ago. The phase tracker and the onset handling make up for most of it.
 
 
 #### Noise floor
