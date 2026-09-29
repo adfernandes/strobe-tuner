@@ -247,26 +247,23 @@ gui_track_settings :: proc(
         // The track stands still this far off the exact partial, eg a stretched octave
         rect := settings_row(l, row, "Target offset", 176)
         row += 1
-        offset, ok := gui_stepper(
-            rect,
-            config.strobe_offsets_cents[slot],
-            TRACK_OFFSET_STEP_CENTS,
-            -TRACK_OFFSET_MAX_CENTS,
-            TRACK_OFFSET_MAX_CENTS,
-            0,
-            "%+.1f¢",
-        )
-        if ok {
+        offset := config.strobe_offsets_cents[slot]
+        // No sign on the exact partial
+        label := fmt.ctprintf("%+.1f¢", offset) if offset != 0 else "0¢"
+        steps, reset := gui_stepper_buttons(rect, label)
+        if reset do offset = 0
+        offset = clamp(offset + steps * TRACK_OFFSET_STEP_CENTS, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
+        if offset != config.strobe_offsets_cents[slot] {
             config.strobe_offsets_cents[slot] = offset
             changed = true
         }
     }
 
     {
-        // On top of the strobe speed, a high partial spins faster than the rest. In words, × is for partials.
+        // On top of the strobe speed, a high partial spins faster than the rest. In percent, × is for partials.
         speeds := [?]f32{0.25, 0.5, 1, 2}
-        labels := []cstring{"Slowest", "Slower", "Normal", "Faster"}
-        rect := settings_row(l, row, "Speed", f32(len(labels)) * 72)
+        labels := []cstring{"25%", "50%", "100%", "200%"}
+        rect := settings_row(l, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
         selected := -1
         for speed, i in speeds {
