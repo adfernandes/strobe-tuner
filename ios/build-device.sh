@@ -131,7 +131,7 @@ $CC -ObjC \
 # --- signing -----------------------------------------------------------------------------------
 
 if [ -z "${IOS_PROFILE:-}" ] || [ ! -f "$IOS_PROFILE" ]; then
-    echo "Set IOS_PROFILE to the Ad Hoc provisioning profile (.mobileprovision)"
+    echo "IOS_PROFILE has to point to a provisioning profile (.mobileprovision), got '${IOS_PROFILE:-}'"
     exit 1
 fi
 
