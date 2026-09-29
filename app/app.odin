@@ -41,9 +41,25 @@ INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
-// Point the strobe at a new frequency with the current speed and mode
+// A Harmonics preset, it replaces the partials and clears what was set on each track
+apply_interval_preset :: proc(config: ^Config, index: int) {
+    options := INTERVAL_OPTIONS
+    defaults := get_config_defaults()
+    config.strobe_intervals_index = index
+    config.strobe_intervals = options[index]
+    config.strobe_offsets_cents = defaults.strobe_offsets_cents
+    config.strobe_speeds = defaults.strobe_speeds
+}
+
+// Point the strobe at a new frequency with the current tracks, speed and mode
 @(private = "file")
 retune :: proc(phase_comparator: ^core.PhaseComparator, freq_hz: f32, config: ^Config) {
+    core.set_phase_comparator_tracks(
+        phase_comparator,
+        config.strobe_intervals[:],
+        config.strobe_offsets_cents[:],
+        config.strobe_speeds[:],
+    )
     core.set_phase_comparator_freq(
         phase_comparator,
         freq_hz,
@@ -137,6 +153,11 @@ run_app :: proc(config: ^Config) {
     settings_open := false
     settings_slide: f32 = 0 // how far the sheet is up, it follows settings_open
 
+    // A track's own sheet, opened by tapping the track, slides up the same way
+    track_open := false
+    track_slide: f32 = 0
+    selected_track := 0
+
     note_low_state := false
     note_high_state := false
     arrow_pulse_phase: f32 = 0
@@ -219,7 +240,6 @@ run_app :: proc(config: ^Config) {
             tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
 
             set_strobe_colors(&strobe_display, get_strobe_colors(config))
-            core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
             retune(phase_comparator, tuner.target_note.frequency, config)
             config_changed = false
         }
@@ -249,10 +269,7 @@ run_app :: proc(config: ^Config) {
         }
 
         if key_pressed(.I) && config.strobe_mode == .HARMONIC_MODE {
-            config.strobe_intervals_index += 1
-            if config.strobe_intervals_index >= len(interval_options) do config.strobe_intervals_index = 0
-            config.strobe_intervals = interval_options[config.strobe_intervals_index]
-            core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
+            apply_interval_preset(config, (config.strobe_intervals_index + 1) % len(interval_options))
             retune(phase_comparator, tuner.target_note.frequency, config)
         }
 
@@ -276,13 +293,17 @@ run_app :: proc(config: ^Config) {
         // The settings sheet slides up over the main screen, which keeps running under it and ignores
         // taps until the sheet is all the way down again. The sheet is drawn at the end of the frame.
         settings_was_open := settings_open
-        settings_slide += (f32(int(settings_open)) - settings_slide) * min(1, SETTINGS_SLIDE_SPEED * gfx_frame_time())
-        if abs(f32(int(settings_open)) - settings_slide) < 0.002 do settings_slide = f32(int(settings_open))
-        gui_disabled = settings_open || settings_slide > 0
+        settings_slide = slide_sheet(settings_slide, settings_open)
+        track_was_open := track_open
+        track_slide = slide_sheet(track_slide, track_open)
+        gui_disabled = settings_open || settings_slide > 0 || track_open || track_slide > 0
 
         {
 
             setup_strobe_display(&strobe_display, config.strobe_display_type)
+            // The selected track stands out as its sheet comes up
+            strobe_display.selected_track = selected_track
+            strobe_display.selection = track_slide
 
             if config.strobe_display_type == .TRACE {
                 trace_rect := layout.strobe
@@ -302,6 +323,21 @@ run_app :: proc(config: ^Config) {
                     out_of_range,
                     config,
                 )
+
+                // Tapping a track opens its sheet, fine mode shows the same pitch on every track
+                if config.strobe_mode == .HARMONIC_MODE && !microphone_denied() && gui_button(layout.strobe) {
+                    track := strobe_track_at(
+                        config.strobe_display_type,
+                        layout.strobe,
+                        layout.strobe_scale,
+                        len(phase_comparator.bands),
+                        mouse_position(),
+                    )
+                    if track >= 0 {
+                        selected_track = track
+                        track_open = true
+                    }
+                }
             }
 
             // A denied microphone only gives silence and the strobe would just stand still, say why instead
@@ -515,7 +551,7 @@ run_app :: proc(config: ^Config) {
         }
 
         if settings_slide > 0 {
-            settings_layout := compute_settings_layout(gfx_window_size(), gfx_safe_area(), settings_slide)
+            settings_layout := compute_settings_layout(gfx_window_size(), gfx_safe_area(), settings_slide, SETTINGS_ROWS)
 
             // The strobe looks set into the window above the sheet like above the panel
             strobe_bottom := layout.strobe.y + layout.strobe.height
@@ -548,6 +584,45 @@ run_app :: proc(config: ^Config) {
             }
         }
 
+        if track_slide > 0 {
+            sheet_layout := compute_settings_layout(gfx_window_size(), gfx_safe_area(), track_slide, TRACK_SETTINGS_ROWS)
+
+            strobe_bottom := layout.strobe.y + layout.strobe.height
+            if config.strobe_display_type != .TRACE && sheet_layout.sheet.y < strobe_bottom {
+                draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
+            }
+
+            // Not the tap that opened it, and not while it slides away
+            gui_disabled = !(track_was_open && track_open)
+
+            selected_track = min(selected_track, len(phase_comparator.bands) - 1)
+            close, changed := gui_track_settings(
+                sheet_layout,
+                config,
+                selected_track,
+                phase_comparator.bands[selected_track],
+            )
+            if changed do config_changed = true
+
+            // Tapping another track above the sheet switches to it, anywhere else closes the sheet
+            above := sheet_layout.sheet
+            above.height = above.y
+            above.y = 0
+            if gui_button(above) {
+                track := strobe_track_at(
+                    config.strobe_display_type,
+                    layout.strobe,
+                    layout.strobe_scale,
+                    len(phase_comparator.bands),
+                    mouse_position(),
+                )
+                if track >= 0 do selected_track = track
+                else do close = true
+            }
+
+            if close do track_open = false
+        }
+
         // With nothing to show the screen updates less often, it saves the battery of a tuner left open. The
         // strobe is dark while no band is above the background noise, and the pitch detection still runs
         // often enough to wake it up.
@@ -556,7 +631,7 @@ run_app :: proc(config: ^Config) {
             if band.snr_db > STROBE_FADE_SNR_DB[0] do signal = true
         }
         touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
-        sliding := settings_slide != f32(int(settings_open))
+        sliding := settings_slide != f32(int(settings_open)) || track_slide != f32(int(track_open))
         if signal || touched || sliding {
             quiet_time = 0
         } else {
@@ -568,6 +643,15 @@ run_app :: proc(config: ^Config) {
 
 // Per second, how quickly the settings sheet closes the distance, like the ruler
 SETTINGS_SLIDE_SPEED :: 14
+
+// How far a sheet is up next frame, it eases towards open or closed and snaps the last bit
+@(private = "file")
+slide_sheet :: proc(slide: f32, open: bool) -> f32 {
+    target := f32(int(open))
+    slide := slide + (target - slide) * min(1, SETTINGS_SLIDE_SPEED * gfx_frame_time())
+    if abs(target - slide) < 0.002 do slide = target
+    return slide
+}
 
 // See quiet_time in run_app
 IDLE_AFTER_S :: 2

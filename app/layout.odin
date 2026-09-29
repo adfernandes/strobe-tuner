@@ -160,15 +160,16 @@ SETTINGS_COMPACT_ROW_HEIGHT :: 36 // a mouse
 SETTINGS_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
 SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 
-// open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way
-compute_settings_layout :: proc(window: [2]f32, safe: Rect, open: f32) -> (l: SettingsLayout) {
+// open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
+// have SETTINGS_ROWS, a track's sheet fewer.
+compute_settings_layout :: proc(window: [2]f32, safe: Rect, open: f32, rows: int) -> (l: SettingsLayout) {
     left := safe.x + PANEL_PADDING
     l.width = safe.width - 2 * PANEL_PADDING
     l.row_height = SETTINGS_ROW_HEIGHT if is_portrait(window) else SETTINGS_COMPACT_ROW_HEIGHT
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
-    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + SETTINGS_ROWS * l.row_height + below
+    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + f32(rows) * l.row_height + below
     height = min(height, window.y - safe.y)
     l.sheet = {0, window.y - open * height, window.x, height}
 

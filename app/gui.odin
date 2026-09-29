@@ -90,17 +90,9 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
 }
 
 
-// touch_height is the height of the band, the labels are a band apart so their touch areas don't overlap
-gui_strobe_partial :: proc(
-    position: [2]f32,
-    type: PartialLabelType,
-    band: core.PhaseBand,
-    touch_height: f32,
-) -> (
-    PartialLabelType,
-    bool,
-) {
-
+// Right aligned at position, a track's offset from the exact partial goes before it so it's never hidden.
+// Tapping the track opens its sheet, see strobe_track_at.
+draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand) {
     text: cstring
     font := pixel_fonts.label_large
 
@@ -124,20 +116,13 @@ gui_strobe_partial :: proc(
 
     draw_label(font, text, {bounds.x, bounds.y}, hex(0x82E2FFFF))
 
-    // The text is much smaller than a finger, the touch area is as tall as the band, at least a finger wide
-    // and reaches past the right aligned text to the edge of the strobe
-    TOUCH_MIN_WIDTH :: 44
-    RIGHT_MARGIN :: 12
-    touch_width := max(text_size.x, TOUCH_MIN_WIDTH) + RIGHT_MARGIN
-    center_y := bounds.y + text_size.y / 2
-    touch := Rect{position.x + RIGHT_MARGIN - touch_width, center_y - touch_height / 2, touch_width, touch_height}
-
-    if gui_button(touch) {
-        if type == .MULTIPLES do return .FREQUENCY, true
-        else if type == .FREQUENCY do return .NOTE_NAMES, true
-        return .MULTIPLES, true
+    if band.offset_cents != 0 {
+        offset_font := pixel_fonts.label
+        offset := fmt.ctprintf("%+.1f¢", band.offset_cents)
+        offset_size := measure_label(offset_font, offset)
+        center_y := bounds.y + text_size.y / 2
+        draw_label(offset_font, offset, {bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}, text_color_light)
     }
-    return type, false
 }
 
 

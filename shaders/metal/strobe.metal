@@ -32,6 +32,7 @@ struct StrobeUniforms {
     float4 color_b;
     float4 glow_filter; // lamp filter, normalized and squared on the CPU, see glow_filter in strobe_display.odin
     float4 glow_dark_filter; // the dark stripes can have a hue of their own
+    float4 highlight_color; // outline of the selected track
     float curvature_radius;
     float time_stretch;
     float phase;
@@ -47,6 +48,8 @@ struct StrobeUniforms {
     float period_count;
     float min_radius;
     float max_radius;
+    float highlight; // 0..1, outlines the track whose sheet is open
+    float dim; // 0..1, darkens the other tracks meanwhile
     int strobe_blur;
     int motion_blur;
     int glow;
@@ -56,6 +59,10 @@ constant float TAU = 6.28318530717958647692;
 
 // Share of the lamp light the dark stripes let through
 constant float DARK_TRANSMISSION = 0.3;
+
+// The selected track: its outline along both edges, inside the track, and how much the others darken
+constant float OUTLINE_WIDTH = 2.0;
+constant float DIM_AMOUNT = 0.65;
 
 
 static float generate_signal(
@@ -219,6 +226,15 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
         rgb = mix(dark_rgb, lit_rgb, lit);
         rgb = mix(float3(dot(rgb, float3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
     }
+
+    // The outline follows the arc, the distance to the nearer edge of the track
+    if (u.highlight > 0.0) {
+        float radial_position = length(distance);
+        float edge = min(radial_position - (u.curvature_radius - thickness), u.curvature_radius - radial_position);
+        float outline = 1.0 - smoothstep(OUTLINE_WIDTH, OUTLINE_WIDTH + 1.0, edge);
+        rgb = mix(rgb, u.highlight_color.rgb, u.highlight * outline);
+    }
+    rgb *= 1.0 - DIM_AMOUNT * u.dim;
 
     return float4(rgb, alpha);
 }

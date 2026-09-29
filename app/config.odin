@@ -55,6 +55,10 @@ Config :: struct {
     // how many spinning bands to show
     strobe_intervals:             [MAX_INTERVALS]f32,
     strobe_intervals_index:       int,
+    // per track, harmonic mode: the target this many cents off the exact partial, eg a stretched octave
+    strobe_offsets_cents:         [MAX_INTERVALS]f32,
+    // per track, harmonic mode: on top of strobe_speed, 1 leaves it as is
+    strobe_speeds:                [MAX_INTERVALS]f32,
 
     // FFT length for the pitch detector, e.g. 4096 samples
     pitch_detect_fft_size:        int,
@@ -114,6 +118,8 @@ config_defaults :: Config {
     pitch_standard               = 440.0,
     strobe_intervals             = {1, 2, 4, 0, 0, 0, 0, 0},
     strobe_intervals_index       = 0,
+    strobe_offsets_cents         = {0, 0, 0, 0, 0, 0, 0, 0},
+    strobe_speeds                = {1, 1, 1, 1, 1, 1, 1, 1},
     pitch_detect_fft_size        = 8192,
     samplerate                   = 48_000,
     strobe_mode                  = .HARMONIC_MODE,

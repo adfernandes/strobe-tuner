@@ -112,6 +112,7 @@ StrobeUniforms :: struct #align (16) {
     color_b:          [4]f32,
     glow_filter:      [4]f32, // see glow_filter in strobe_display.odin
     glow_dark_filter: [4]f32,
+    highlight_color:  [4]f32, // outline of the selected track
     curvature_radius: f32,
     time_stretch:     f32,
     phase:            f32,
@@ -127,6 +128,8 @@ StrobeUniforms :: struct #align (16) {
     period_count:     f32,
     min_radius:       f32,
     max_radius:       f32,
+    highlight:        f32, // 0..1, outlines the track whose sheet is open
+    dim:              f32, // 0..1, darkens the other tracks meanwhile
     strobe_blur:      i32,
     motion_blur:      i32,
     glow:             i32,

@@ -30,6 +30,10 @@ const float TAU = radians(360);
 // Share of the lamp light the dark stripes let through
 const float DARK_TRANSMISSION = 0.3;
 
+// The selected track: its outline along both edges, inside the track, and how much the others darken
+const float OUTLINE_WIDTH = 2.0;
+const float DIM_AMOUNT = 0.65;
+
 // Uniforms
 uniform vec4 bounding_rect;
 uniform float curvature_radius;
@@ -55,6 +59,9 @@ uniform float err_cents;
 uniform float period_count;
 uniform float min_radius;
 uniform float max_radius;
+uniform vec4 highlight_color; // outline of the selected track
+uniform float highlight; // 0..1, outlines the track whose sheet is open
+uniform float dim; // 0..1, darkens the other tracks meanwhile
 
 
 float generate_signal(
@@ -225,6 +232,15 @@ void main()
         rgb = mix(dark_rgb, lit_rgb, lit);
         rgb = mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, glow_saturation);
     }
+
+    // The outline follows the arc, the distance to the nearer edge of the track
+    if (highlight > 0.0) {
+        float radial_position = length(distance);
+        float edge = min(radial_position - (curvature_radius - thickness), curvature_radius - radial_position);
+        float outline = 1.0 - smoothstep(OUTLINE_WIDTH, OUTLINE_WIDTH + 1.0, edge);
+        rgb = mix(rgb, highlight_color.rgb, highlight * outline);
+    }
+    rgb *= 1.0 - DIM_AMOUNT * dim;
 
 
     // Circular gradient from center to the outer edge

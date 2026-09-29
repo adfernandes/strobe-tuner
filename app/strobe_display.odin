@@ -47,6 +47,78 @@ StrobeDisplay :: struct {
     // per band stripe sharpness and visibility, smoothed so they don't flicker, see update_band_look
     band_amp:        [core.MAX_BANDS]f32,
     band_visibility: [core.MAX_BANDS]f32,
+
+    // The track whose sheet is open, outlined while the others dim. selection fades it in and out with
+    // the sheet, 0 is no selection.
+    selected_track:  int,
+    selection:       f32,
+}
+
+// Where the tracks go in the strobe, the drawing and strobe_track_at share it
+@(private)
+StrobeGeometry :: struct {
+    y:                f32, // top of the outermost track
+    curvature_radius: f32, // outer radius of the innermost track, each track further out is a band_height larger
+    band_height:      f32,
+    period_count:     f32, // how many strobe periods fit in a circle
+}
+
+// The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
+// a taller rect only extends the background upwards (e.g. behind the notch). Not ok for the trace.
+@(private)
+strobe_geometry :: proc(
+    display_type: StrobeDisplayType,
+    rect: Rect,
+    scale: f32,
+    band_count: int,
+) -> (
+    g: StrobeGeometry,
+    ok: bool,
+) {
+    switch display_type {
+    case .SPINNING_WHEEL:
+        g.curvature_radius = 90.0
+        g.band_height = 26.0
+        g.period_count = 4.0
+    case .CURVED_TRACKS:
+        g.curvature_radius = 440.0
+        g.band_height = 66.0
+        if band_count > 3 {
+            g.band_height = 50.0
+        }
+        g.period_count = 12.0
+    case .TRACE:
+        return {}, false
+    }
+    g.curvature_radius *= scale
+    g.band_height *= scale
+
+    g.y = rect.y + rect.height - scale * STROBE_HEIGHT
+    if display_type == .CURVED_TRACKS {
+        g.y += 32 * scale
+    }
+    return g, true
+}
+
+// The track under point, -1 for none. The tracks are concentric, the gap outside a track counts as part
+// of it, so the whole ring from one track to the next is its touch area.
+strobe_track_at :: proc(
+    display_type: StrobeDisplayType,
+    rect: Rect,
+    scale: f32,
+    band_count: int,
+    point: [2]f32,
+) -> int {
+    g, ok := strobe_geometry(display_type, rect, scale, band_count)
+    if !ok || !point_in_rect(point, rect) do return -1
+
+    // The centre of the circles, see draw_strobe_bands and the strobe shader
+    center := [2]f32{rect.x + rect.width / 2, g.y + 10 + g.curvature_radius + g.band_height * f32(band_count - 1)}
+    r := linalg.length(point - center)
+
+    track := int(math.ceil((r - g.curvature_radius) / g.band_height))
+    if track < 0 || track >= band_count do return -1
+    return track
 }
 
 
@@ -197,8 +269,7 @@ set_strobe_colors :: proc(self: ^StrobeDisplay, colors: [2]u32) {
     self.colors = {hex(colors.x), hex(colors.y)}
 }
 
-// The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
-// a taller rect only extends the background upwards (e.g. behind the notch)
+// See strobe_geometry for the layout
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     rect: Rect,
@@ -207,27 +278,13 @@ draw_strobe_display :: proc(
     out_of_range: bool,
     config: ^Config,
 ) {
-    curvature_radius: f32
-    band_height: f32
-    period_count: f32
-
-    switch self.display_type {
-    case .SPINNING_WHEEL:
-        curvature_radius = 90.0
-        band_height = 26.0
-        period_count = 4.0 // how many strobe periods to fit in a circle
-    case .CURVED_TRACKS:
-        curvature_radius = 440.0
-        band_height = 66.0
-        if len(phase_info.bands) > 3 {
-            band_height = 50.0
-        }
-        period_count = 12.0
-    case .TRACE:
-        return // drawn by draw_cents_trace instead
-    }
-    curvature_radius *= scale
-    band_height *= scale
+    // The trace is drawn by draw_cents_trace instead
+    g, ok := strobe_geometry(self.display_type, rect, scale, len(phase_info.bands))
+    if !ok do return
+    y := g.y
+    curvature_radius := g.curvature_radius
+    band_height := g.band_height
+    period_count := g.period_count
 
     glow_enabled := config.strobe_glow
     glow_params := get_glow_params(config)
@@ -251,12 +308,8 @@ draw_strobe_display :: proc(
     }
     uniforms.glow_filter.rgb = glow_filter(glow_params.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow_params.dark_color)
+    uniforms.highlight_color = normalize_color(hex(0x82E2FFFF))
     min_radius := uniforms.min_radius
-
-    y := rect.y + rect.height - scale * STROBE_HEIGHT
-    if self.display_type == .CURVED_TRACKS {
-        y += 32 * scale
-    }
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings
@@ -313,15 +366,11 @@ draw_strobe_display :: proc(
             }
 
             // Partial order, e.g. 1x, 2x, etc
-            partial_labels, changed := gui_strobe_partial(
+            draw_strobe_partial(
                 {rect.x + rect.width - 12, y + band_height * (f32(order) + 0.6) + r - sin},
                 config.partial_labels,
                 band,
-                band_height,
             )
-            if changed {
-                config.partial_labels = partial_labels
-            }
         }
     }
 
@@ -435,6 +484,10 @@ draw_strobe_bands :: proc(
         uniforms.amp, uniforms.visibility = update_band_look(self, &band, band_idx, period_count)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
+
+        selected := band_idx == self.selected_track
+        uniforms.highlight = self.selection if selected else 0
+        uniforms.dim = 0 if selected else self.selection
 
         set_shader_uniforms(self.strobe_shader, uniforms)
         draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})

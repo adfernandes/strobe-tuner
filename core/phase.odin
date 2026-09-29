@@ -71,6 +71,8 @@ StrobeMode :: enum {
 PhaseBand :: struct {
     freq_hz:                      f32,
     interval:                     f32, // interval ratio, eg 1x for base note, 1.5x for perfect fifth,  2x for octave, etc
+    offset_cents:                 f32, // harmonic mode, the track stands still this far off the exact partial, eg a stretched octave
+    speed_scale:                  f32, // harmonic mode, on top of the track's speed, 1 leaves it as is
     note:                         Note,
     norm_freq:                    f32,
     freq_diff_hz:                 f32,
@@ -152,6 +154,7 @@ init_phase_comparator :: proc(
         if interval >= 1.0 {
             band := PhaseBand{}
             band.interval = interval
+            band.speed_scale = 1
             band.noise_floor = init_noise_floor(noise_floor_snr_db_threshold)
 
             append(&self.bands, band)
@@ -179,12 +182,23 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 // Like init_phase_comparator, a band per interval of 1 or more, the rest are padding. The bands are made
 // once, so it has to be as many as then. Kept in fine mode too, for switching back to harmonic mode.
 // Takes effect with the next set_phase_comparator_freq.
-set_phase_comparator_intervals :: proc(self: ^PhaseComparator, strobe_intervals: []f32) {
+// The partial, target offset and speed of each track, the offsets and speeds line up with the intervals.
+// Takes effect with the next set_phase_comparator_freq.
+set_phase_comparator_tracks :: proc(
+    self: ^PhaseComparator,
+    strobe_intervals: []f32,
+    offsets_cents: []f32,
+    speeds: []f32,
+) {
     band_idx := 0
-    for interval in strobe_intervals {
+    for interval, i in strobe_intervals {
         if interval < 1.0 do continue
         assert(band_idx < len(self.bands), "more strobe intervals than bands")
-        self.bands[band_idx].interval = interval
+        band := &self.bands[band_idx]
+        band.interval = interval
+        band.offset_cents = offsets_cents[i]
+        // a missing speed would freeze the track
+        band.speed_scale = speeds[i] if speeds[i] > 0 else 1
         band_idx += 1
     }
     assert(band_idx == len(self.bands), "fewer strobe intervals than bands")
@@ -200,7 +214,7 @@ set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
         }
     } else if self.mode == .HARMONIC_MODE {
         for &band in self.bands {
-            band.speed = speed * band.interval
+            band.speed = speed * band.interval * band.speed_scale
         }
     }
 }
@@ -244,14 +258,16 @@ set_phase_comparator_freq :: proc(
         band.onset_hold = 0
 
         if self.mode == .HARMONIC_MODE {
-            band.freq_hz = band.interval * base_freq_hz
-            band.speed = speed * band.interval
+            // Named after the exact partial, a big offset would otherwise land on the next note
+            band.note = find_note(band.interval * base_freq_hz, pitch_standard)
+            band.freq_hz = band.interval * base_freq_hz * math.pow(2, band.offset_cents / 1200)
+            band.speed = speed * band.interval * band.speed_scale
         } else if self.mode == .FINE_MODE {
             band.freq_hz = base_freq_hz
+            band.note = find_note(band.freq_hz, pitch_standard)
             band.speed = speed
             speed *= speed_multiplier
         }
-        band.note = find_note(band.freq_hz, pitch_standard)
         band.norm_freq = band.freq_hz / self.samplerate
         band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
 
@@ -279,9 +295,15 @@ wrap_phase :: proc(phase: f64) -> f64 {
 run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> (f32, f32, bool) {
     base_band := &self.bands[0]
 
-    // The base band has the lowest frequency and therefore the longest window.
+    // Just the longest window, the lowest partial's, which isn't always the first track's.
     // Need to keep this buffer slice relatively small to keep the display refresh without latency.
-    resize_sample_buffer(self, base_band.dft_config.window_size)
+    window_size := base_band.dft_config.window_size
+    if self.mode == .HARMONIC_MODE {
+        for band in self.bands {
+            window_size = max(window_size, band.dft_config.window_size)
+        }
+    }
+    resize_sample_buffer(self, window_size)
     available := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
 
     // Skip when there are no new samples, the scaled phase stays the same
@@ -323,6 +345,28 @@ test_best_dft_window_size :: proc(t: ^testing.T) {
     testing.expect_value(t, v1, 7339)
     testing.expect_value(t, v2, 1835)
     testing.expect_value(t, v3, 193)
+}
+
+
+@(test)
+test_track_offset_and_speed :: proc(t: ^testing.T) {
+    intervals := []f32{1, 2, 3}
+    self := init_phase_comparator(110, 48_000, intervals, .HARMONIC_MODE, 10)
+    defer destroy_phase_comparator(self)
+
+    // A wide octave, a slower twelfth
+    set_phase_comparator_tracks(self, intervals, {0, 30, 0}, {1, 1, 0.5})
+    set_phase_comparator_freq(self, 110, 440, 0.01, 2, .HARMONIC_MODE)
+
+    testing.expect(t, abs(self.bands[1].freq_hz - 220 * math.pow(f32(2), 30.0 / 1200)) < 0.001)
+    testing.expect_value(t, self.bands[1].note.name, 'A')
+    testing.expect_value(t, self.bands[1].note.octave, 3)
+    testing.expect(t, abs(self.bands[2].speed - 0.01 * 3 * 0.5) < 1e-6)
+
+    // A missing speed leaves the track at its normal speed
+    set_phase_comparator_tracks(self, intervals, {0, 0, 0}, {1, 1, 0})
+    set_phase_comparator_speed(self, 0.01)
+    testing.expect(t, abs(self.bands[2].speed - 0.01 * 3) < 1e-6)
 }
 
 

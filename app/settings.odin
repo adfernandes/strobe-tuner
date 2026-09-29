@@ -93,10 +93,12 @@ gui_settings :: proc(
         labels := []cstring{"1 2 4", "1 1½ 2", "1 2 3"}
         rect := settings_row(l, row, "Harmonics", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
-        if i, ok := gui_segmented(rect, labels, config.strobe_intervals_index); ok {
-            options := INTERVAL_OPTIONS
-            config.strobe_intervals_index = i
-            config.strobe_intervals = options[i]
+        // None selected once a track follows another partial
+        options := INTERVAL_OPTIONS
+        preset := config.strobe_intervals_index
+        if preset < 0 || preset >= len(options) || config.strobe_intervals != options[preset] do preset = -1
+        if i, ok := gui_segmented(rect, labels, preset); ok {
+            apply_interval_preset(config, i)
             changed = true
         }
     }
@@ -177,6 +179,158 @@ gui_settings :: proc(
 }
 
 
+// A track's own sheet, opened by tapping it on the strobe in harmonic mode. Shorter than the settings so the
+// strobe stays in sight while the track is tuned. Returns close when ✕ is tapped, changed when the strobe
+// needs updating.
+TRACK_SETTINGS_ROWS :: 4
+
+// The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
+TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
+TRACK_OFFSET_MAX_CENTS :: 50
+TRACK_OFFSET_STEP_CENTS :: 0.5
+
+gui_track_settings :: proc(
+    l: SettingsLayout,
+    config: ^Config,
+    track: int,
+    band: core.PhaseBand,
+) -> (
+    close: bool,
+    changed: bool,
+) {
+    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(window_bg_color))
+
+    // The title, then the note the track follows and its target
+    title := fmt.ctprintf("Track %d", track + 1)
+    draw_label(pixel_fonts.title, title, l.title, text_color_white, 1)
+    details := fmt.ctprintf(
+        "%v%v%v · %.1f Hz",
+        band.note.name,
+        "#" if band.note.is_accidental else "",
+        band.note.octave,
+        band.freq_hz,
+    )
+    title_size := measure_label(pixel_fonts.title, title, 1)
+    details_y := l.title.y + (title_size.y - LABEL_SIZE) / 2
+    draw_label(pixel_fonts.label, details, {l.title.x + title_size.x + 12, details_y}, text_color_muted, 1)
+
+    draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
+    if gui_button(l.close) do close = true
+
+    slot := track_slot(config, track)
+    if slot < 0 do return
+
+    // What the track goes back to, the partial of the last preset
+    options := INTERVAL_OPTIONS
+    preset := clamp(config.strobe_intervals_index, 0, len(options) - 1)
+    preset_partial := options[preset][slot]
+
+    row := 0
+
+    {
+        rect := settings_row(l, row, "Partial", 176)
+        row += 1
+        partial := config.strobe_intervals[slot]
+        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%v×", partial))
+        if reset {
+            partial = preset_partial
+        } else if steps != 0 {
+            partial = step_partial(partial, int(steps))
+        }
+        if partial != config.strobe_intervals[slot] {
+            config.strobe_intervals[slot] = partial
+            changed = true
+        }
+    }
+
+    {
+        // The track stands still this far off the exact partial, eg a stretched octave
+        rect := settings_row(l, row, "Target offset", 176)
+        row += 1
+        offset, ok := gui_stepper(
+            rect,
+            config.strobe_offsets_cents[slot],
+            TRACK_OFFSET_STEP_CENTS,
+            -TRACK_OFFSET_MAX_CENTS,
+            TRACK_OFFSET_MAX_CENTS,
+            0,
+            "%+.1f¢",
+        )
+        if ok {
+            config.strobe_offsets_cents[slot] = offset
+            changed = true
+        }
+    }
+
+    {
+        // On top of the strobe speed, a high partial spins faster than the rest
+        speeds := [?]f32{0.25, 0.5, 1, 2}
+        labels := []cstring{"¼×", "½×", "1×", "2×"}
+        rect := settings_row(l, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
+        row += 1
+        selected := -1
+        for speed, i in speeds {
+            if config.strobe_speeds[slot] == speed do selected = i
+        }
+        if i, ok := gui_segmented(rect, labels, selected); ok {
+            config.strobe_speeds[slot] = speeds[i]
+            changed = true
+        }
+    }
+
+    {
+        rect := settings_row(l, row, "Reset track", 2 * SEGMENT_WIDTH)
+        row += 1
+        draw_pill(rect, pill_gray if gui_button_held(touch_area(rect)) else pill_dark)
+        draw_centered_label("Reset", rect, text_color_white)
+        if gui_button(touch_area(rect)) {
+            config.strobe_intervals[slot] = preset_partial
+            config.strobe_offsets_cents[slot] = 0
+            config.strobe_speeds[slot] = 1
+            changed = true
+        }
+    }
+
+    return
+}
+
+// Where the track's partial, offset and speed are in the config, the tracks are the partials above 0
+track_slot :: proc(config: ^Config, track: int) -> int {
+    count := 0
+    for interval, slot in config.strobe_intervals {
+        if interval < 1 do continue
+        if count == track do return slot
+        count += 1
+    }
+    return -1
+}
+
+// The next partial up or down from one of TRACK_PARTIALS or any other set in the config file
+@(private = "file")
+step_partial :: proc(partial: f32, steps: int) -> f32 {
+    partials := TRACK_PARTIALS
+    partial := partial
+    for _ in 0 ..< abs(steps) {
+        if steps > 0 {
+            for p in partials {
+                if p > partial {
+                    partial = p
+                    break
+                }
+            }
+        } else {
+            #reverse for p in partials {
+                if p < partial {
+                    partial = p
+                    break
+                }
+            }
+        }
+    }
+    return partial
+}
+
+
 // 24pt icon in the middle of a 2x larger touch area
 gui_settings_button :: proc(position: [2]f32) -> bool {
     draw_icon(ICON_SLIDERS, position, icon_color, large = true)
@@ -232,6 +386,15 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, boo
 
 // A value with - and + on either side
 gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: string) -> (f32, bool) {
+    steps, reset := gui_stepper_buttons(rect, fmt.ctprintf(format, value))
+    if reset do return default, true
+    if steps != 0 do return clamp(value + steps * step, low, high), true
+    return value, false
+}
+
+// The - and + around label, returns the steps taken or reset when the label is double clicked
+@(private = "file")
+gui_stepper_buttons :: proc(rect: Rect, label: cstring) -> (steps: f32, reset: bool) {
     draw_pill(rect, pill_dark)
 
     button_width: f32 = 44
@@ -240,35 +403,40 @@ gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: st
 
     icon_offset := [2]f32{(button_width - 16) / 2, (rect.height - 16) / 2}
     draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, icon_color)
-    draw_centered_label(fmt.ctprintf(format, value), rect, text_color_white)
+    draw_centered_label(label, rect, text_color_white)
     draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
 
-    if gui_button(touch_area(minus)) do return max(value - step, low), true
-    if gui_button(touch_area(plus)) do return min(value + step, high), true
+    if gui_button(touch_area(minus)) do return -1, false
+    if gui_button(touch_area(plus)) do return 1, false
 
     // Double clicking the value between the buttons puts it back to the default
     if gui_button(touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})) {
         now := time.tick_now()
         double_click := time.tick_diff(stepper_last_click, now) < 400 * time.Millisecond
         stepper_last_click = now
-        if double_click do return default, true
+        if double_click do return 0, true
     }
 
-    // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps
+    // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps.
+    // Only the stepper under the mouse keeps the fraction, with a few on a sheet.
     if point_in_rect(mouse_position(), touch_area(rect)) && !exclusive_control_mode && !gui_disabled {
+        if stepper_scroll_rect != rect do stepper_scroll = 0
+        stepper_scroll_rect = rect
         stepper_scroll += mouse_wheel()
-        steps := math.trunc(stepper_scroll)
+        steps = math.trunc(stepper_scroll)
         stepper_scroll -= steps
-        if steps != 0 do return clamp(value + steps * step, low, high), true
-    } else {
+    } else if stepper_scroll_rect == rect {
         stepper_scroll = 0
     }
 
-    return value, false
+    return steps, false
 }
 
 @(private = "file")
 stepper_scroll: f32
+
+@(private = "file")
+stepper_scroll_rect: Rect
 
 @(private = "file")
 stepper_last_click: time.Tick
