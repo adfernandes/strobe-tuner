@@ -551,7 +551,13 @@ run_app :: proc(config: ^Config) {
         }
 
         if settings_slide > 0 {
-            settings_layout := compute_settings_layout(gfx_window_size(), gfx_safe_area(), settings_slide, SETTINGS_ROWS)
+            settings_layout := compute_settings_layout(
+                gfx_window_size(),
+                gfx_safe_area(),
+                settings_slide,
+                SETTINGS_ROWS,
+                layout.strobe,
+            )
 
             // The strobe looks set into the window above the sheet like above the panel
             strobe_bottom := layout.strobe.y + layout.strobe.height
@@ -585,7 +591,13 @@ run_app :: proc(config: ^Config) {
         }
 
         if track_slide > 0 {
-            sheet_layout := compute_settings_layout(gfx_window_size(), gfx_safe_area(), track_slide, TRACK_SETTINGS_ROWS)
+            sheet_layout := compute_settings_layout(
+                gfx_window_size(),
+                gfx_safe_area(),
+                track_slide,
+                TRACK_SETTINGS_ROWS,
+                layout.strobe,
+            )
 
             strobe_bottom := layout.strobe.y + layout.strobe.height
             if config.strobe_display_type != .TRACE && sheet_layout.sheet.y < strobe_bottom {

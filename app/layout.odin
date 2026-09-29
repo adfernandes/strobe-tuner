@@ -161,8 +161,17 @@ SETTINGS_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area 
 SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
-// have SETTINGS_ROWS, a track's sheet fewer.
-compute_settings_layout :: proc(window: [2]f32, safe: Rect, open: f32, rows: int) -> (l: SettingsLayout) {
+// have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
+// short sheet would leave half the panel peeking out above it.
+compute_settings_layout :: proc(
+    window: [2]f32,
+    safe: Rect,
+    open: f32,
+    rows: int,
+    strobe: Rect,
+) -> (
+    l: SettingsLayout,
+) {
     left := safe.x + PANEL_PADDING
     l.width = safe.width - 2 * PANEL_PADDING
     l.row_height = SETTINGS_ROW_HEIGHT if is_portrait(window) else SETTINGS_COMPACT_ROW_HEIGHT
@@ -170,6 +179,7 @@ compute_settings_layout :: proc(window: [2]f32, safe: Rect, open: f32, rows: int
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
     height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + f32(rows) * l.row_height + below
+    height = max(height, window.y - (strobe.y + strobe.height))
     height = min(height, window.y - safe.y)
     l.sheet = {0, window.y - open * height, window.x, height}
 
