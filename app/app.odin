@@ -561,7 +561,7 @@ run_app :: proc(config: ^Config) {
 
             // The strobe looks set into the window above the sheet like above the panel
             strobe_bottom := layout.strobe.y + layout.strobe.height
-            if config.strobe_display_type != .TRACE && settings_layout.sheet.y < strobe_bottom {
+            if config.strobe_display_type != .TRACE && settings_layout.sheet.y < strobe_bottom + 1 {
                 draw_strobe_bottom_shadow(&strobe_display, layout.strobe, settings_layout.sheet.y)
             }
 
@@ -600,7 +600,8 @@ run_app :: proc(config: ^Config) {
             )
 
             strobe_bottom := layout.strobe.y + layout.strobe.height
-            if config.strobe_display_type != .TRACE && sheet_layout.sheet.y < strobe_bottom {
+            // Up to the strobe's edge too, a short sheet stops right there
+            if config.strobe_display_type != .TRACE && sheet_layout.sheet.y < strobe_bottom + 1 {
                 draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
             }
 
