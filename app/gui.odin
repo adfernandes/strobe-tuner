@@ -90,6 +90,12 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
 }
 
 
+// A partial without the ×, the fifth as 1½ like the Harmonics presets
+partial_text :: proc(partial: f32) -> cstring {
+    if partial == 1.5 do return "1½"
+    return fmt.ctprintf("%v", partial)
+}
+
 // Right aligned at position, a track's offset from the exact partial goes before it so it's never hidden.
 // Tapping the track opens its sheet, see strobe_track_at.
 draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand) {
@@ -108,7 +114,7 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
             band.note.octave,
         )
     } else {
-        text = fmt.ctprintf("%v×", band.interval)
+        text = fmt.ctprintf("%v×", partial_text(band.interval))
     }
 
     text_size := measure_label(font, text)

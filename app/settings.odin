@@ -231,7 +231,7 @@ gui_track_settings :: proc(
         rect := settings_row(l, row, "Partial", 176)
         row += 1
         partial := config.strobe_intervals[slot]
-        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%v", partial), times = true)
+        steps, reset := gui_stepper_buttons(rect, partial_text(partial), times = true)
         if reset {
             partial = preset_partial
         } else if steps != 0 {
