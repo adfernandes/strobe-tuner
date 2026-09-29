@@ -103,7 +103,6 @@ READOUT_SMOOTHING :: 0.2
 READOUT_JUMP_CENTS :: 6
 
 // Averages the strong detections so the readout doesn't flicker with every one, a new pluck starts afresh
-@(private)
 steady_readout :: proc(self: ^Tuner, freq: f32) {
     jump := self.steady_freq == 0 || !self.active || abs(cents_deviation(freq, self.steady_freq)) > READOUT_JUMP_CENTS
     if jump {

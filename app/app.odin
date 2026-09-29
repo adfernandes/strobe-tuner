@@ -52,7 +52,6 @@ apply_interval_preset :: proc(config: ^Config, index: int) {
 }
 
 // Point the strobe at a new frequency with the current tracks, speed and mode
-@(private = "file")
 retune :: proc(phase_comparator: ^core.PhaseComparator, freq_hz: f32, config: ^Config) {
     core.set_phase_comparator_tracks(
         phase_comparator,
@@ -275,7 +274,13 @@ run_app :: proc(config: ^Config) {
             retune(phase_comparator, tuner.target_note.frequency, config)
         }
 
-        layout :=compute_layout(gfx_window_size(), gfx_safe_area(), config.chromatic_ruler)
+        window, safe := gfx_window_size(), gfx_safe_area()
+        // The plots take the rest of the window on the right
+        when DEBUG_STATS {
+            window.x = STROBE_WIDTH
+            safe.width = STROBE_WIDTH
+        }
+        layout := compute_layout(window, safe, config.chromatic_ruler)
         update_pixel_fonts(layout.ruler_scale)
 
         // Draw the GUI controls
@@ -700,7 +705,6 @@ run_app :: proc(config: ^Config) {
 SETTINGS_SLIDE_SPEED :: 14
 
 // How far a sheet is up next frame, it eases towards open or closed and snaps the last bit
-@(private = "file")
 slide_sheet :: proc(slide: f32, open: bool) -> f32 {
     target := f32(int(open))
     slide := slide + (target - slide) * min(1, SETTINGS_SLIDE_SPEED * gfx_frame_time())
@@ -721,7 +725,6 @@ SHEET_DISMISS_SLIDE :: 0.7
 SHEET_DISMISS_VELOCITY :: 600
 
 // Moves the sheet while it's dragged, returns true when it's let go to close
-@(private = "file")
 drag_sheet :: proc(drag: ^SheetDrag, slide: ^f32, l: SettingsLayout) -> (close: bool) {
     mouse := mouse_position()
     if !drag.active {

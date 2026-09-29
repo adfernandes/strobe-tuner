@@ -310,7 +310,6 @@ track_slot :: proc(config: ^Config, track: int) -> int {
 }
 
 // The next partial up or down from one of TRACK_PARTIALS or any other set in the config file
-@(private = "file")
 step_partial :: proc(partial: f32, steps: int) -> f32 {
     partials := TRACK_PARTIALS
     partial := partial
@@ -343,7 +342,6 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
 
 
 // Label on the left, the control right aligned, returns where the control goes
-@(private = "file")
 settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_width: f32) -> Rect {
     y := l.rows.y + f32(index) * l.row_height
 
@@ -359,7 +357,6 @@ settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_widt
 }
 
 // The pills are slimmer than a finger, taps anywhere in the height of their row count
-@(private = "file")
 touch_area :: proc(rect: Rect) -> Rect {
     return {rect.x, rect.y - SETTINGS_CONTROL_MARGIN, rect.width, rect.height + 2 * SETTINGS_CONTROL_MARGIN}
 }
@@ -398,7 +395,6 @@ gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: st
 
 // The - and + around label, times puts a × after it. Returns the steps taken or reset when the label is
 // double clicked.
-@(private = "file")
 gui_stepper_buttons :: proc(rect: Rect, label: cstring, times := false) -> (steps: f32, reset: bool) {
     draw_pill(rect, pill_dark)
 
@@ -448,13 +444,8 @@ gui_stepper_buttons :: proc(rect: Rect, label: cstring, times := false) -> (step
     return steps, false
 }
 
-@(private = "file")
 stepper_scroll: f32
-
-@(private = "file")
 stepper_scroll_rect: Rect
-
-@(private = "file")
 stepper_last_click: time.Tick
 
 

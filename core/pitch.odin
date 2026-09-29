@@ -131,7 +131,6 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     return info
 }
 
-@(private)
 calculate_rms :: proc(samples: []f32) -> f32 {
     square_sum: f32 = 0
     for s in samples do square_sum += s * s

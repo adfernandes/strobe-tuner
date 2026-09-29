@@ -401,7 +401,6 @@ test_track_offset_and_speed :: proc(t: ^testing.T) {
 
 // Keep the newest samples aligned to the end of the buffer when the window size changes, so the buffer
 // always holds one contiguous stretch of audio ending at sample_clock.
-@(private)
 resize_sample_buffer :: proc(self: ^PhaseComparator, size: int) {
     if size == self.buffer_len do return
 
@@ -477,7 +476,6 @@ determine_band_phase :: proc(
 
 
 // Detect a new pluck (sudden amplitude jump) and distrust the phase until the attack has passed
-@(private)
 update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int) {
     band.onset_hold = max(band.onset_hold - self.available, 0)
 
@@ -495,7 +493,6 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int)
 // Kalman filter over [phase, frequency offset], the measurement is the wrapped lock-in phase.
 // The measurement noise follows the band SNR: a loud note is tracked closely, a decaying note
 // gradually coasts on its last good frequency instead of wandering with the noise.
-@(private)
 update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     tr := &band.tracker
     measured := f64(band.phase)
@@ -543,7 +540,6 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 }
 
 
-@(private)
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int, is_tonal: bool) {
     if self.mode == .HARMONIC_MODE || band_idx == 0 {

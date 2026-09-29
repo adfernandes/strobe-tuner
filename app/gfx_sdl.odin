@@ -54,26 +54,22 @@ when RENDERER == "sdl" {
         fallback:  Glyph, // for missing glyphs, like raylib the first one
     }
 
-    @(private = "file")
     Program :: enum {
         SPRITE,
         STROBE,
         BLOOM,
     }
 
-    @(private = "file")
     Vertex :: struct {
         position: [2]f32,
         uv:       [2]f32,
         color:    Color,
     }
 
-    @(private = "file")
     UniformRange :: struct {
         offset, size: int,
     }
 
-    @(private = "file")
     DrawCommand :: struct {
         program:      Program,
         blend:        BlendMode,
@@ -84,7 +80,6 @@ when RENDERER == "sdl" {
         vertex_count: u32,
     }
 
-    @(private = "file")
     Pass :: struct {
         target:        ^sdl.GPUTexture, // nil for the window
         target_size:   [2]f32, // in pixels
@@ -95,22 +90,15 @@ when RENDERER == "sdl" {
     }
 
     // Render targets are always this format, the window may use another one
-    @(private = "file")
     TARGET_FORMAT :: sdl.GPUTextureFormat.R8G8B8A8_UNORM
 
-    @(private = "file")
     PASS_WINDOW :: 0
-    @(private = "file")
     PASS_TARGET :: 1
 
-    @(private = "file")
     MSL_SPRITE :: #load("../shaders/metal/sprite.metal")
-    @(private = "file")
     MSL_STROBE :: #load("../shaders/metal/strobe.metal")
-    @(private = "file")
     MSL_BLOOM :: #load("../shaders/metal/bloom.metal")
 
-    @(private = "file")
     scancodes := [Key]sdl.Scancode {
         .LEFT        = .LEFT,
         .RIGHT       = .RIGHT,
@@ -120,7 +108,7 @@ when RENDERER == "sdl" {
         .SPACE       = .SPACE,
         .COMMA       = .COMMA,
         .ESCAPE      = .ESCAPE,
-        .G          = .G,
+        .G           = .G,
         .I           = .I,
         .R           = .R,
         .X           = .X,
@@ -130,7 +118,6 @@ when RENDERER == "sdl" {
         .RIGHT_SUPER = .RGUI,
     }
 
-    @(private = "file")
     gpu: struct {
         window:           ^sdl.Window,
         device:           ^sdl.GPUDevice,
@@ -315,7 +302,6 @@ when RENDERER == "sdl" {
         if !sdl.OpenURL(url) do fmt.eprintln("SDL_OpenURL failed:", sdl.GetError())
     }
 
-    @(private = "file")
     watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
         // Not WILL_ENTER_BACKGROUND, it comes for anything that makes the app inactive, like the Control
         // Center or the microphone permission alert, and it may keep drawing then
@@ -795,7 +781,6 @@ when RENDERER == "sdl" {
     }
 
 
-    @(private = "file")
     program_of :: proc(shader: Shader) -> Program {
         switch shader {
         case .STROBE:
@@ -806,12 +791,10 @@ when RENDERER == "sdl" {
         return .SPRITE
     }
 
-    @(private = "file")
     begin_window_pass :: proc(clear: Maybe(Color)) {
         append(&gpu.passes, Pass{clear = clear, zoom = 1, first_command = len(gpu.commands)})
     }
 
-    @(private = "file")
     push_quad :: proc(texture: ^sdl.GPUTexture, dest: Rect, uv0, uv1: [2]f32, color: Color) {
         x0, y0 := dest.x, dest.y
         x1, y1 := dest.x + dest.width, dest.y + dest.height
@@ -829,7 +812,6 @@ when RENDERER == "sdl" {
     }
 
     // Appends to the last draw command if nothing changed since, otherwise starts a new one
-    @(private = "file")
     push_vertices :: proc(texture: ^sdl.GPUTexture, vertices: []Vertex) {
         command := DrawCommand {
             program      = gpu.program,
@@ -857,7 +839,6 @@ when RENDERER == "sdl" {
         append(&gpu.commands, command)
     }
 
-    @(private = "file")
     upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
         if len(gpu.vertices) == 0 do return
         size := len(gpu.vertices) * size_of(Vertex)
@@ -884,7 +865,6 @@ when RENDERER == "sdl" {
         sdl.EndGPUCopyPass(copy_pass)
     }
 
-    @(private = "file")
     create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
         handle := sdl.CreateGPUTexture(
             gpu.device,
@@ -919,7 +899,6 @@ when RENDERER == "sdl" {
         return {handle, width, height}
     }
 
-    @(private = "file")
     create_shader :: proc(
         source: []u8,
         entrypoint: cstring,
@@ -945,7 +924,6 @@ when RENDERER == "sdl" {
         return shader
     }
 
-    @(private = "file")
     create_pipeline :: proc(
         program: Program,
         blend: BlendMode,

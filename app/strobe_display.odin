@@ -55,7 +55,6 @@ StrobeDisplay :: struct {
 }
 
 // Where the tracks go in the strobe, the drawing and strobe_track_at share it
-@(private)
 StrobeGeometry :: struct {
     y:                f32, // top of the outermost track
     curvature_radius: f32, // outer radius of the innermost track, each track further out is a band_height larger
@@ -65,7 +64,6 @@ StrobeGeometry :: struct {
 
 // The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
 // a taller rect only extends the background upwards (e.g. behind the notch). Not ok for the trace.
-@(private)
 strobe_geometry :: proc(
     display_type: StrobeDisplayType,
     rect: Rect,
@@ -151,7 +149,6 @@ destroy_strobe_display :: proc(self: ^StrobeDisplay) {
     unload_glow_targets(self)
 }
 
-@(private)
 unload_glow_targets :: proc(self: ^StrobeDisplay) {
     if self.glow_scale == 0 do return
     gfx_unload_render_target(self.scene_rt)
@@ -162,7 +159,6 @@ unload_glow_targets :: proc(self: ^StrobeDisplay) {
 }
 
 // (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp
-@(private)
 ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
     scale := gfx_dpi_scale()
     if scale == self.glow_scale && size == self.glow_size do return
@@ -178,7 +174,6 @@ ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
 }
 
 // Separable gaussian blur, ping-pongs between the two targets and ends up in rts[0]
-@(private)
 blur_render_targets :: proc(
     self: ^StrobeDisplay,
     rts: [2]RenderTarget,
@@ -208,7 +203,6 @@ blur_render_targets :: proc(
 
 // The filter the lamp shines through, the hue scaled up to full brightness and squared to saturate it
 // (FF6767 -> 1.0, 0.16, 0.16). The same for the whole strobe, so the shader gets it ready made.
-@(private)
 glow_filter :: proc(color: u32) -> [3]f32 {
     rgb := normalize_color(hex(color)).rgb
     filter := rgb / max(rgb.r, rgb.g, rgb.b, 0.001)
@@ -218,7 +212,6 @@ glow_filter :: proc(color: u32) -> [3]f32 {
 // Lift the background a little, as if some lamp light scatters behind the whole disc.
 // Based on the darkest stripe, the dark stripes of the outer band away from the hotspot,
 // mirrors the light model in the strobe shader.
-@(private)
 glow_background :: proc(background: Color, glow: GlowParams) -> Color {
     DARK_TRANSMISSION :: 0.3
     MIN_LAMP :: 0.6
@@ -239,7 +232,6 @@ glow_background :: proc(background: Color, glow: GlowParams) -> Color {
     return color_from_normalized({lifted.r, lifted.g, lifted.b, 1})
 }
 
-@(private)
 render_bloom :: proc(self: ^StrobeDisplay) {
     set_blend_mode(.REPLACE)
     defer set_blend_mode(.ALPHA)
@@ -385,7 +377,6 @@ draw_strobe_display :: proc(
 }
 
 // The shadow over the strobe, a little past its top and bottom so only the edges are dark
-@(private = "file")
 shadow_rect :: proc(strobe: Rect) -> Rect {
     return {strobe.x, strobe.y - 20, strobe.width, strobe.height + 22}
 }
@@ -406,7 +397,6 @@ draw_strobe_bottom_shadow :: proc(self: ^StrobeDisplay, strobe: Rect, bottom: f3
 }
 
 // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
-@(private)
 // The stripe edges are as sharp as the phase is certain: a sharp edge on a jittery phase twitches,
 // a soft edge on a clean one looks washed out. The shader draws amp * sin(phase), so an edge spans
 // about 2 / amp radians of the strobe phase, keep that a few standard deviations of the phase wide.
@@ -416,7 +406,6 @@ STROBE_MAX_AMP :: 50.0 // limit, to avoid jagged edges in the strobe display
 STROBE_FADE_SNR_DB :: [2]f32{8, 16}
 STROBE_LOOK_TIME_S :: 0.05
 
-@(private)
 update_band_look :: proc(
     self: ^StrobeDisplay,
     band: ^core.PhaseBand,

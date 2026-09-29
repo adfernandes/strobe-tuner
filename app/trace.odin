@@ -49,13 +49,11 @@ destroy_trace :: proc(self: ^Trace) {
     delete(self.samples)
 }
 
-@(private = "file")
 trace_sample :: proc(self: ^Trace, i: int) -> TraceSample {
     n := len(self.samples)
     return self.samples[(self.head - self.count + i + n) % n]
 }
 
-@(private = "file")
 push_sample :: proc(self: ^Trace, sample: TraceSample) {
     self.samples[self.head] = sample
     self.head = (self.head + 1) % len(self.samples)
@@ -142,13 +140,11 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
     }
 }
 
-@(private = "file")
 draw_dot :: proc(center: [2]f32, radius: f32, color: Color) {
     draw_rounded_rect({center.x - radius, center.y - radius, 2 * radius, 2 * radius}, radius, color)
 }
 
 // Draws a line as dots half a radius apart, the spacing carries over from one piece of the line to the next
-@(private = "file")
 Pen :: struct {
     radius:     f32,
     color:      Color,
@@ -156,14 +152,12 @@ Pen :: struct {
     until_next: f32, // distance left to the next dot
 }
 
-@(private = "file")
 pen_start :: proc(pen: ^Pen, p: [2]f32) {
     draw_dot(p, pen.radius, pen.color)
     pen.position = p
     pen.until_next = 0.5 * pen.radius
 }
 
-@(private = "file")
 pen_line_to :: proc(pen: ^Pen, p: [2]f32) {
     delta := p - pen.position
     length := math.sqrt(delta.x * delta.x + delta.y * delta.y)

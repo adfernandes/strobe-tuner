@@ -52,8 +52,9 @@ NOTE_SHARP_SIZE :: 48
 RULER_NOTE_SIZE :: 88 // the target note
 RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
-RULER_NOTE_SHARP_SIZE :: 48
-RULER_NEIGHBOUR_SHARP_SIZE :: 28
+// The sharps 3/8 of their letter like NOTE_SHARP_SIZE, the octave already matches
+RULER_NOTE_SHARP_SIZE :: 33
+RULER_NEIGHBOUR_SHARP_SIZE :: 20
 READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
 NOTE_ARROW_SIZE :: 26 // either side of the note without the ruler
 STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune

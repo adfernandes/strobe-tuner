@@ -94,7 +94,6 @@ nsdf_pitch_detect :: proc(self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
 // Generate the auto-correlation
 //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
 //    then taking the inverse FFT will give us the cyclic auto-correlation.
-@(private)
 nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
     assert(len(samples) <= self.fft_size / 2)
 
@@ -139,7 +138,6 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
 }
 
 
-@(private)
 nsdf_find_peak :: proc(self: ^NSDFConfig) -> Vec2 {
     // clear out peaks from the previous run
     clear(&self.nsdf_peaks)
@@ -212,7 +210,6 @@ nsdf_find_peak :: proc(self: ^NSDFConfig) -> Vec2 {
 
 // Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
-@(private)
 nsdf_run_nsdf :: proc(self: ^NSDFConfig, samples: []f32) {
     n := len(samples)
     copy(self.nsdf, self.autocorr[:n])

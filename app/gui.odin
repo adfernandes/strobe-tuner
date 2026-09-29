@@ -19,6 +19,7 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import "core:time"
 
 
 import "../core"
@@ -94,17 +95,18 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
 
 // The key of a transposing instrument: an LED and the label like the FAST toggle, then the key between −
 // and + that step it. The LED lights in any key but C so it isn't left on by mistake, tapping it or the
-// label goes back to C. pos is the left edge, vertically centred. Returns the new transpose, see
-// Config.transpose.
+// label or double tapping the key goes back to C. pos is the left edge, vertically centred. Returns the
+// new transpose, see Config.transpose.
 gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
     // A Bb instrument sounds a tone below the written note, the note shows 2 semitones up
     KEYS :: [12]cstring{"C", "B", "Bb", "A", "Ab", "G", "Gb", "F", "E", "Eb", "D", "Db"}
     LED_SIZE :: 8
     LABEL_GAP :: 10
-    STEPPER_GAP :: 18 // from the label to the −
-    KEY_SLOT :: 36 // between the − and +, wide enough for "Bb" without them moving
-    STEP_TOUCH :: 36
-    TOUCH_HEIGHT :: 44
+    STEPPER_GAP :: 26 // from the label to the −
+    KEY_SLOT :: 56 // between the − and +, wide enough for "Bb" without them moving
+    STEP_TOUCH :: 56 // centred on the − and +, up to the key's touch area
+    KEY_TOUCH :: 28
+    TOUCH_HEIGHT :: 52
 
     keys := KEYS
     on := transpose != 0
@@ -129,14 +131,24 @@ gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
 
     // Down a key is up a semitone on the note
     top := pos.y - TOUCH_HEIGHT / 2
-    minus_center := minus_x + minus_size.x / 2
-    plus_center := plus_x + plus_size.x / 2
-    if gui_button({minus_center - STEP_TOUCH / 2, top, STEP_TOUCH, TOUCH_HEIGHT}) do return (transpose + 1) % 12
-    if gui_button({plus_center - STEP_TOUCH / 2, top, STEP_TOUCH, TOUCH_HEIGHT}) do return (transpose + 11) % 12
+    minus_left := minus_x + minus_size.x / 2 - STEP_TOUCH / 2
+    plus_right := plus_x + plus_size.x / 2 + STEP_TOUCH / 2
+    key_left := key_center - KEY_TOUCH / 2
+    key_right := key_center + KEY_TOUCH / 2
+    if gui_button({minus_left, top, key_left - minus_left, TOUCH_HEIGHT}) do return (transpose + 1) % 12
+    if gui_button({key_right, top, plus_right - key_right, TOUCH_HEIGHT}) do return (transpose + 11) % 12
+    if gui_button({key_left, top, KEY_TOUCH, TOUCH_HEIGHT}) {
+        now := time.tick_now()
+        double_click := time.tick_diff(transpose_last_click, now) < 400 * time.Millisecond
+        transpose_last_click = now
+        if double_click do return 0
+    }
     // The LED and the label, up to the − touch area
-    if gui_button({pos.x - 12, top, minus_center - STEP_TOUCH / 2 - pos.x + 12, TOUCH_HEIGHT}) do return 0
+    if gui_button({pos.x - 12, top, minus_left - pos.x + 12, TOUCH_HEIGHT}) do return 0
     return transpose
 }
+
+transpose_last_click: time.Tick
 
 
 // A partial without the ×, the fifth as 1½ like the Harmonics presets
@@ -236,9 +248,9 @@ gui_note_arrows :: proc(pos: [2]f32, locked: bool) -> (step: int) {
 // The notes slide over to the next semitone, further jumps snap. The sizes don't change, the target is large wherever it is.
 // The fonts are loaded at the exact sizes, see update_pixel_fonts, and everything lands on whole pixels.
 
-RULER_MIN_SPACING :: 70 // between the letters of neighbouring semitones, room for a sharp between them
+RULER_SPACING :: 70 // between the letters of neighbouring semitones, room for a sharp between them
 RULER_CENTER_GAP :: 30 // extra room either side of the large note
-RULER_EDGE :: 36 // half a letter and a sharp, the outermost ones end at the edges
+RULER_EDGE :: 36 // half a letter and a sharp, the outermost ones stay inside the edges
 RULER_MAX_PER_SIDE :: 2
 RULER_SLIDE_SPEED :: 14 // per second, how quickly the slide closes the distance
 RULER_LOWEST :: -48 // A0, in semitones from A4
@@ -268,18 +280,15 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int)
     s := pixel_fonts.ruler_scale
     center_gap := s * RULER_CENTER_GAP
 
-    // As many neighbours as fit, up to 2 a side, spread out to reach the edges
+    // As many neighbours as fit, up to 2 a side, the same distance apart in any width
     room := rect.width / 2 - s * RULER_EDGE - center_gap
-    per_side := clamp(int(room / (s * RULER_MIN_SPACING)), 1, RULER_MAX_PER_SIDE)
-    spacing := room / f32(per_side)
+    spacing := s * RULER_SPACING
+    per_side := clamp(int(room / spacing), 1, RULER_MAX_PER_SIDE)
 
     // The target note is white while there's a pitch, like the note without the ruler
     note_color := text_color_white if active else text_color_muted
 
-    // Notes slide in and out at the edges
-    begin_scissor(rect)
-    defer end_scissor()
-
+    // Notes slide in and out at the ends, fading, the next one out is only drawn while it slides
     first := max(int(math.floor(ruler_position)) - per_side - 1, RULER_LOWEST)
     last := min(int(math.ceil(ruler_position)) + per_side + 1, RULER_HIGHEST)
     for k in first ..= last {
@@ -292,8 +301,13 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int)
             continue
         }
 
+        fade := clamp(f32(per_side) + 1 - distance, 0, 1)
+        if fade == 0 do continue
+        color := text_color_muted
+        color.a = u8(f32(color.a) * fade)
+
         n := core.cents_to_note(f32(k * 100), note.pitch_standard)
-        draw_ruler_note(n, {x, center.y}, pixel_fonts.neighbour, pixel_fonts.neighbour_sharp, false, text_color_muted)
+        draw_ruler_note(n, {x, center.y}, pixel_fonts.neighbour, pixel_fonts.neighbour_sharp, false, color)
 
         // Tapping another note locks it
         if distance <= f32(per_side) {
@@ -306,7 +320,6 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int)
 
 // The name centred on pos, the sharp and the octave (only on the target) to the right.
 // Drawn at the fonts' own size, one texel to one pixel.
-@(private = "file")
 draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, show_octave: bool, color: Color) {
     size := name_font.size
 
@@ -490,7 +503,7 @@ draw_measurements :: proc(
     value := pixel_fonts.readout
 
     // The labels stay in the background, the values and the note are what's read
-    VALUE_Y :: 18
+    VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
     hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
     cents_str := "-" if show_placeholder else fmt.ctprintf("%.1f", math.abs(cents))
@@ -520,6 +533,9 @@ draw_measurements :: proc(
 
 // Between the columns of the centred readout, room for the minus
 READOUT_GUTTER :: 40
+
+// From the top of the labels to the top of the values
+READOUT_VALUE_Y :: 18
 
 // From the right edge of the cents column to the right edge of the Hz column
 HZ_COLUMN_OFFSET :: 100

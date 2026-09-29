@@ -35,7 +35,6 @@ when RENDERER == "raylib" {
         kind:   ShaderKind,
     }
 
-    @(private = "file")
     raylib_keys := [Key]rl.KeyboardKey {
         .LEFT        = .LEFT,
         .RIGHT       = .RIGHT,
@@ -45,7 +44,7 @@ when RENDERER == "raylib" {
         .SPACE       = .SPACE,
         .COMMA       = .COMMA,
         .ESCAPE      = .ESCAPE,
-        .G          = .G,
+        .G           = .G,
         .I           = .I,
         .R           = .R,
         .X           = .X,
@@ -56,7 +55,6 @@ when RENDERER == "raylib" {
     }
 
     // Uniform locations by field name, per shader
-    @(private = "file")
     uniform_locations: [ShaderKind]map[string]i32
 
     gfx_init :: proc(width, height: i32, title: cstring) -> bool {
@@ -151,13 +149,12 @@ when RENDERER == "raylib" {
     when ODIN_OS == .Darwin {
         foreign import core_foundation "system:CoreFoundation.framework"
 
-        @(private = "file", default_calling_convention = "c")
+        @(default_calling_convention = "c")
         foreign core_foundation {
             CFPreferencesGetAppBooleanValue :: proc(key, application: CF.String, valid: ^b8) -> b8 ---
         }
 
         // On unless turned off in System Settings, a missing key means the default
-        @(private = "file")
         natural_scrolling :: proc() -> bool {
             valid: b8
             natural := CFPreferencesGetAppBooleanValue(CF.STR("com.apple.swipescrolldirection"), CF.STR(".GlobalPreferences"), &valid)
@@ -189,12 +186,58 @@ when RENDERER == "raylib" {
         rl.UnloadTexture(texture)
     }
 
+    // Not LoadFontFromMemory, its atlas is sized from the font size and the glyphs' widths and comes out
+    // half height for a few narrow glyphs. A 125px ♯ alone got a 128x64 atlas, its bottom spilled past
+    // the end. Here the glyphs go in one row as tall as the tallest.
     gfx_load_font :: proc(ttf: []u8, size: i32, codepoints: string) -> Font {
+        PADDING :: 4 // like raylib, keeps the filtering from bleeding between glyphs
+
         ccodepoints := strings.clone_to_cstring(codepoints, context.temp_allocator)
         count := i32(0)
         runes := rl.LoadCodepoints(ccodepoints, &count)
         defer rl.UnloadCodepoints(runes)
-        return rl.LoadFontFromMemory(".ttf", raw_data(ttf), i32(len(ttf)), size, runes, count)
+
+        font := Font {
+            baseSize     = size,
+            glyphCount   = count,
+            glyphPadding = PADDING,
+        }
+        font.glyphs = rl.LoadFontData(raw_data(ttf), i32(len(ttf)), size, runes, count, .DEFAULT, &font.glyphCount)
+        if font.glyphs == nil do return font
+        // UnloadFont frees them with raylib's allocator
+        font.recs = cast([^]rl.Rectangle)rl.MemAlloc(u32(font.glyphCount) * size_of(rl.Rectangle))
+
+        width, height: i32 = PADDING, 0
+        for glyph in font.glyphs[:font.glyphCount] {
+            width += glyph.image.width + PADDING
+            height = max(height, glyph.image.height)
+        }
+        height += 2 * PADDING
+
+        // White, the glyph in the alpha
+        pixels := make([]u8, width * height * 2, context.temp_allocator)
+        for i in 0 ..< width * height do pixels[2 * i] = 255
+        x: i32 = PADDING
+        for glyph, i in font.glyphs[:font.glyphCount] {
+            source := ([^]u8)(glyph.image.data)
+            for gy in 0 ..< glyph.image.height {
+                for gx in 0 ..< glyph.image.width {
+                    pixels[2 * ((PADDING + gy) * width + x + gx) + 1] = source[gy * glyph.image.width + gx]
+                }
+            }
+            font.recs[i] = {f32(x), PADDING, f32(glyph.image.width), f32(glyph.image.height)}
+            x += glyph.image.width + PADDING
+        }
+
+        atlas := rl.Image {
+            data    = raw_data(pixels),
+            width   = width,
+            height  = height,
+            mipmaps = 1,
+            format  = .UNCOMPRESSED_GRAY_ALPHA,
+        }
+        font.texture = rl.LoadTextureFromImage(atlas)
+        return font
     }
 
     gfx_unload_font :: proc(font: Font) {

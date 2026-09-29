@@ -17,8 +17,7 @@
 package app
 
 // Where everything goes, worked out every frame from the window size and the safe area, in points.
-// A tall window (a phone in portrait) stacks the panel under a taller strobe with larger notes, anything
-// else gets the desktop layout.
+// The same on the desktop and a phone, both are portrait windows: the strobe on top, the panel under it.
 
 Layout :: struct {
     strobe:         Rect,
@@ -37,49 +36,29 @@ Layout :: struct {
     settings:       [2]f32,
 }
 
-// Taller than wide by this much gets the portrait layout
-PORTRAIT_ASPECT :: 1.3
 PANEL_PADDING :: 16
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 
 RULER_HEIGHT :: 110
-// A phone has the room for larger notes and readout values, and they're read from further away than a
-// desktop screen
-PORTRAIT_RULER_SCALE :: 1.3
+// Larger notes and readout values than the ruler was drawn at, they're read from a music stand
+RULER_SCALE :: 1.3
 // Above the ruler and centred, without it right aligned with the values on the baseline of the note letter
 READOUT_WIDTH :: HZ_COLUMN_OFFSET + 75 // enough for "4186.0"
 READOUT_HEIGHT :: 48
-READOUT_RULER_GAP :: 16
+// Inter's letters and digits fill less than their font size: the cap height is 0.6 of it, the baseline
+// 0.8 down from the top. The ruler is spaced by what's drawn.
+CAP_HALF :: 0.3 // the letter's top and baseline from its middle, in font sizes
+BASELINE :: 0.8 // from the top of the text, in font sizes
+RULER_GAP :: 32 // between the readout values, the letter and the lock, the same above and below
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
 
 // Where the right arrow of the note ends, the readout keeps clear of it
-@(private = "file")
 note_right :: proc(l: Layout) -> f32 {
     return l.note.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET + NOTE_ARROW_SLOT
 }
 
-compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> Layout {
-    if is_portrait(window) do return portrait_layout(window, safe, ruler)
-    return desktop_layout(ruler)
-}
-
-@(private = "file")
-is_portrait :: proc(window: [2]f32) -> bool {
-    return window.y > window.x * PORTRAIT_ASPECT
-}
-
-@(private = "file")
-desktop_layout :: proc(ruler: bool) -> (l: Layout) {
-    l.strobe = {0, 0, STROBE_WIDTH, STROBE_HEIGHT}
-    l.strobe_scale = 1
-    l.stats = {250, 400}
-    panel_layout(&l, PANEL_PADDING, STROBE_WIDTH - PANEL_PADDING, DESKTOP_HEIGHT - PANEL_PADDING, ruler, 1)
-    return
-}
-
-@(private = "file")
-portrait_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) {
+compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) {
     left := safe.x + PANEL_PADDING
     right := safe.x + safe.width - PANEL_PADDING
     bottom := safe.y + safe.height - PANEL_PADDING
@@ -91,14 +70,12 @@ portrait_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) 
     panel := l.strobe.y + l.strobe.height
 
     l.stats = {left + 131, panel + 80}
-    panel_layout(&l, left, right, bottom, ruler, PORTRAIT_RULER_SCALE)
+    panel_layout(&l, left, right, bottom, ruler, RULER_SCALE)
     return
 }
 
-// The same on the desktop and a phone: the response and the level meter in a row just under the strobe,
-// the note with the readout above it and the lock under it, and the transpose and the settings in the
-// bottom corners
-@(private = "file")
+// The response and the level meter in a row just under the strobe, the note with the readout above it
+// and the lock under it, and the transpose and the settings in the bottom corners
 panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_scale: f32) {
     panel := l.strobe.y + l.strobe.height
 
@@ -113,13 +90,16 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
     l.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
 
     if ruler {
-        // The readout above the note and the lock under it, the three centred together in the panel.
-        // Offsets from the middle of the ruler.
+        // The readout above the note and the lock under it, the three centred together between the rows
+        // at the top and bottom of the panel. Offsets from the middle of the ruler.
         l.ruler_scale = ruler_scale
         note_size := ruler_scale * RULER_NOTE_SIZE
-        readout_top := -note_size / 2 - READOUT_RULER_GAP - ruler_scale * READOUT_HEIGHT
-        lock_y := note_size / 2 + 28
-        middle := (panel + bottom) / 2 - (readout_top + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
+        readout_values := READOUT_VALUE_Y + BASELINE * ruler_scale * READOUT_SIZE
+        readout_top := -CAP_HALF * note_size - RULER_GAP - readout_values
+        lock_y := CAP_HALF * note_size + RULER_GAP + LOCK_BUTTON_HEIGHT / 2
+        rows_top := l.response.y + LABEL_SIZE / 2
+        rows_bottom := corners - LABEL_SIZE / 2
+        middle := (rows_top + rows_bottom) / 2 - (readout_top + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
 
         center := (left + right) / 2
         height := ruler_scale * RULER_HEIGHT
@@ -146,7 +126,7 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
 }
 
 // The settings, a sheet up from the bottom as tall as its rows, the strobe above it stays in sight to
-// show the changes. The same on desktop and phone, with shorter rows for a mouse.
+// show the changes.
 SettingsLayout :: struct {
     sheet:      Rect, // runs to the bottom of the window
     title:      [2]f32,
@@ -158,7 +138,6 @@ SettingsLayout :: struct {
 
 SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
 SETTINGS_ROW_HEIGHT :: 44 // a finger
-SETTINGS_COMPACT_ROW_HEIGHT :: 36 // a mouse
 SETTINGS_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
 SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 
@@ -176,7 +155,7 @@ compute_settings_layout :: proc(
 ) {
     left := safe.x + PANEL_PADDING
     l.width = safe.width - 2 * PANEL_PADDING
-    l.row_height = SETTINGS_ROW_HEIGHT if is_portrait(window) else SETTINGS_COMPACT_ROW_HEIGHT
+    l.row_height = SETTINGS_ROW_HEIGHT
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2

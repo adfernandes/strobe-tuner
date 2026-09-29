@@ -115,7 +115,6 @@ Config :: struct {
     show_band_cents:              bool,
 }
 
-@(private)
 config_defaults :: Config {
     target_freq_hz               = 110.0,
     pitch_standard               = 440.0,
@@ -216,7 +215,6 @@ load_config :: proc() -> Config {
 
 
 // Write with the field's own size, writing a full int into a smaller field clobbers the next one
-@(private)
 write_int_field :: proc(ptr: rawptr, size: int, value: int) {
     switch size {
     case 1:

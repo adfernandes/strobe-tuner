@@ -173,7 +173,6 @@ register_audio_node :: proc(self: ^AudioCapture, node: ^core.AudioCaptureNode) {
 
 // TODO: remove node?
 
-@(private)
 close_device :: proc(self: ^AudioCapture) {
     if !self.device_open do return
     // Stops the device and waits for any in-flight callback to finish
@@ -193,7 +192,6 @@ destroy_audio_capture :: proc(self: ^AudioCapture) {
 }
 
 
-@(private)
 stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     context = runtime.default_context()
 
@@ -217,7 +215,6 @@ stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_co
     }
 }
 
-@(private)
 notification_callback :: proc "c" (notification: ^ma.device_notification) {
     if notification.type == .interruption_ended {
         self := cast(^AudioCapture)notification.pDevice.pUserData
@@ -246,13 +243,11 @@ when IOS {
 
     foreign import av_foundation "system:AVFoundation.framework"
 
-    @(private)
     foreign av_foundation {
         // NSString, the mode with the least input processing, no automatic gain or equalization
         AVAudioSessionModeMeasurement: rawptr
     }
 
-    @(private)
     activate_audio_session :: proc() {
         session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
         if !intrinsics.objc_send(bool, session, "setMode:error:", AVAudioSessionModeMeasurement, rawptr(nil)) {
