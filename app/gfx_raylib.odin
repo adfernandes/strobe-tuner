@@ -44,7 +44,8 @@ when RENDERER == "raylib" {
         .TAB         = .TAB,
         .SPACE       = .SPACE,
         .COMMA       = .COMMA,
-        .G           = .G,
+        .ESCAPE      = .ESCAPE,
+        .G          = .G,
         .I           = .I,
         .R           = .R,
         .X           = .X,
@@ -62,6 +63,8 @@ when RENDERER == "raylib" {
         rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
         rl.SetConfigFlags({.WINDOW_HIGHDPI})
         rl.InitWindow(width, height, title)
+        // Escape closes the sheets, Cmd+Q quits
+        rl.SetExitKey(.KEY_NULL)
         rl.SetTargetFPS(120)
         return rl.IsWindowReady()
     }

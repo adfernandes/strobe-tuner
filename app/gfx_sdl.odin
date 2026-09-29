@@ -119,7 +119,8 @@ when RENDERER == "sdl" {
         .TAB         = .TAB,
         .SPACE       = .SPACE,
         .COMMA       = .COMMA,
-        .G           = .G,
+        .ESCAPE      = .ESCAPE,
+        .G          = .G,
         .I           = .I,
         .R           = .R,
         .X           = .X,
@@ -278,8 +279,6 @@ when RENDERER == "sdl" {
                 gpu.quit = true
             case .KEY_DOWN:
                 if event.key.repeat do break
-                // like raylib, escape closes the window
-                if event.key.scancode == .ESCAPE do gpu.quit = true
                 for scancode, key in scancodes {
                     if scancode == event.key.scancode do gpu.keys_pressed += {key}
                 }

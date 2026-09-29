@@ -152,10 +152,12 @@ run_app :: proc(config: ^Config) {
 
     settings_open := false
     settings_slide: f32 = 0 // how far the sheet is up, it follows settings_open
+    settings_drag: SheetDrag
 
     // A track's own sheet, opened by tapping the track, slides up the same way
     track_open := false
     track_slide: f32 = 0
+    track_drag: SheetDrag
     selected_track := 0
 
     note_low_state := false
@@ -292,6 +294,15 @@ run_app :: proc(config: ^Config) {
 
         // The settings sheet slides up over the main screen, which keeps running under it and ignores
         // taps until the sheet is all the way down again. The sheet is drawn at the end of the frame.
+        // Dragged all the way off, the sheet closes, it isn't there to see the finger let go
+        if settings_drag.active && settings_slide == 0 {
+            settings_open = false
+            settings_drag = {}
+        }
+        if track_drag.active && track_slide == 0 {
+            track_open = false
+            track_drag = {}
+        }
         settings_was_open := settings_open
         settings_slide = slide_sheet(settings_slide, settings_open)
         track_was_open := track_open
@@ -569,12 +580,23 @@ run_app :: proc(config: ^Config) {
                 layout.strobe,
             )
 
+            // Not the tap that opened it, and not while it slides away
+            gui_disabled = !(settings_was_open && settings_open)
+
+            swiped := drag_sheet(&settings_drag, &settings_slide, settings_layout)
+            if settings_drag.active {
+                settings_layout = compute_settings_layout(
+                    gfx_window_size(),
+                    gfx_safe_area(),
+                    settings_slide,
+                    SETTINGS_ROWS,
+                    layout.strobe,
+                )
+            }
+
             // The strobe looks set into the window above the sheet like above the panel, and the edge
             // shades the panel on the way up
             draw_strobe_bottom_shadow(&strobe_display, layout.strobe, settings_layout.sheet.y)
-
-            // Not the tap that opened it, and not while it slides away
-            gui_disabled = !(settings_was_open && settings_open)
 
             close, changed := gui_settings(
                 settings_layout,
@@ -589,10 +611,11 @@ run_app :: proc(config: ^Config) {
             above := settings_layout.sheet
             above.height = above.y
             above.y = 0
-            if gui_button(above) do close = true
+            if gui_button(above) || key_pressed(.ESCAPE) || swiped do close = true
 
             if close {
                 settings_open = false
+                settings_drag = {}
                 audio_device_dropdown_active = false
                 exclusive_control_mode = false
             }
@@ -607,10 +630,21 @@ run_app :: proc(config: ^Config) {
                 layout.strobe,
             )
 
-            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
-
             // Not the tap that opened it, and not while it slides away
             gui_disabled = !(track_was_open && track_open)
+
+            swiped := drag_sheet(&track_drag, &track_slide, sheet_layout)
+            if track_drag.active {
+                sheet_layout = compute_settings_layout(
+                    gfx_window_size(),
+                    gfx_safe_area(),
+                    track_slide,
+                    TRACK_SETTINGS_ROWS,
+                    layout.strobe,
+                )
+            }
+
+            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
 
             selected_track = min(selected_track, len(phase_comparator.bands) - 1)
             close, changed := gui_track_settings(
@@ -637,7 +671,11 @@ run_app :: proc(config: ^Config) {
                 else do close = true
             }
 
-            if close do track_open = false
+            if key_pressed(.ESCAPE) || swiped do close = true
+            if close {
+                track_open = false
+                track_drag = {}
+            }
         }
 
         // With nothing to show the screen updates less often, it saves the battery of a tuner left open. The
@@ -668,6 +706,55 @@ slide_sheet :: proc(slide: f32, open: bool) -> f32 {
     slide := slide + (target - slide) * min(1, SETTINGS_SLIDE_SPEED * gfx_frame_time())
     if abs(target - slide) < 0.002 do slide = target
     return slide
+}
+
+// A sheet follows the finger down from its title strip
+SheetDrag :: struct {
+    active:   bool,
+    grab:     f32, // from the top of the sheet to the finger
+    last_y:   f32,
+    velocity: f32, // points per second, down is positive
+}
+
+// Released this far down, or flicked down this fast, the sheet closes, otherwise it slides back up
+SHEET_DISMISS_SLIDE :: 0.7
+SHEET_DISMISS_VELOCITY :: 600
+
+// Moves the sheet while it's dragged, returns true when it's let go to close
+@(private = "file")
+drag_sheet :: proc(drag: ^SheetDrag, slide: ^f32, l: SettingsLayout) -> (close: bool) {
+    mouse := mouse_position()
+    if !drag.active {
+        // The ✕ closes on the press, the rows below are the controls
+        strip := Rect{l.sheet.x, l.sheet.y, l.sheet.width, l.rows.y - l.sheet.y}
+        if mouse_pressed() &&
+           point_in_rect(mouse, strip) &&
+           !point_in_rect(mouse, l.close) &&
+           !exclusive_control_mode &&
+           !gui_disabled {
+            drag^ = {
+                active = true,
+                grab   = mouse.y - l.sheet.y,
+                last_y = mouse.y,
+            }
+        }
+        return false
+    }
+
+    if !mouse_down() {
+        drag.active = false
+        return slide^ < SHEET_DISMISS_SLIDE || drag.velocity > SHEET_DISMISS_VELOCITY
+    }
+
+    // Smoothed, a finger stops for a frame or two before it lets go
+    if dt := gfx_frame_time(); dt > 0 {
+        drag.velocity += ((mouse.y - drag.last_y) / dt - drag.velocity) * 0.5
+    }
+    drag.last_y = mouse.y
+
+    window := gfx_window_size()
+    slide^ = clamp((window.y - (mouse.y - drag.grab)) / l.sheet.height, 0, 1)
+    return false
 }
 
 // See quiet_time in run_app
