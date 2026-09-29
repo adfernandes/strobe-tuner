@@ -4,7 +4,7 @@
 
 A simple stroboscopic instrument tuner.
 
-https://github.com/user-attachments/assets/be6bc3a4-fe84-44a8-903c-1824b87a64d4
+<video src="https://github.com/user-attachments/assets/be6bc3a4-fe84-44a8-903c-1824b87a64d4" width="300" controls muted></video>
 
 </div>
 
