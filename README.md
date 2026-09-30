@@ -15,11 +15,16 @@ Strobie is on the App Store for Mac and iPhone. The source is here to read and b
 
 - Automatic pitch detection based on NSDF (McLeod Pitch Method).
 - Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality, no contrast or gain to set.
-- Note lock: tap the note to keep the strobe on that note name, the octave still follows the detected pitch.
-- Harmonic mode: shows the partials of the detected note across multiple strobe bands.
-- Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
-- Strobe response toggle (calm / precision): how fast the strobe spins per cent of detuning.
+- Note lock: keeps the strobe on a note name, the octave still follows the detected pitch.
+- Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
+- Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its speed.
+- Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
+- Fast toggle: the strobe spins 4× faster per cent of detuning, for the final adjustment.
+- Five displays: curved tracks, a spinning wheel, a trace of the cents over the last few seconds, a scope that draws the waveform synced to the strobe's frequency, and a ribbon, the classic strobe with stripes lit by the wave.
+- Transpose for B♭, E♭, F and other transposing instruments.
+- Concert A from 400 to 480 Hz.
 - Hertz/Cents display.
+- Four colorways (red, mint, amber, mono) and an optional retro lamp glow.
 
 
 
