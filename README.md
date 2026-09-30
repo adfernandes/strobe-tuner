@@ -4,7 +4,7 @@
 
 A simple stroboscopic instrument tuner.
 
-<img src="docs/demo.webp" width="300" alt="Strobie tuning a G3">
+<img src="docs/demo.webp" width="300" alt="Strobie tuning a note">
 
 </div>
 

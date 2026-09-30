@@ -6,7 +6,7 @@
 # off), scaled down, given transparent rounded corners and encoded without sound. Needs ffmpeg and img2webp,
 # `brew install ffmpeg webp`.
 #
-#   docs/make-webp.sh <recording> [output]    output defaults to docs/demo.webp
+#   ./make-webp.sh <recording> [output]    output defaults to docs/demo.webp
 #
 #   WIDTH=<pixels>     output width, defaults to 600, twice the 300 the README shows it at
 #   FPS=<rate>         frame rate, defaults to 25
@@ -17,7 +17,7 @@
 
 set -eu
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=$(cd "$(dirname "$0")" && pwd)
 WIDTH=${WIDTH:-600}
 FPS=${FPS:-25}
 QUALITY=${QUALITY:-70}
