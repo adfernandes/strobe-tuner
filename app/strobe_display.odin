@@ -240,7 +240,7 @@ glow_background :: proc(background: Color, glow: GlowParams) -> Color {
     MIN_LAMP :: 0.6
     BACKGROUND_LIFT :: 0.25
 
-    filter := glow_filter(glow.dark_color)
+    filter := glow_filter(glow.dark_color) * glow.dark_level
 
     darkest: [3]f32
     for c, i in filter {
@@ -322,7 +322,7 @@ draw_strobe_display :: proc(
         max_radius      = curvature_radius + band_height * f32(len(phase_info.bands) - 1),
     }
     uniforms.glow_filter.rgb = glow_filter(glow_params.color)
-    uniforms.glow_dark_filter.rgb = glow_filter(glow_params.dark_color)
+    uniforms.glow_dark_filter.rgb = glow_filter(glow_params.dark_color) * glow_params.dark_level
     uniforms.highlight_color = normalize_color(hex(0x82E2FFFF))
     min_radius := uniforms.min_radius
 

@@ -416,9 +416,11 @@ gui_dropdown :: proc(
         )
     }
 
-    // menu height without the top & bottom caps
-    menu_height := f32(len(options) * 24)
-    menu_bounds := Rect{position.x, position.y - menu_height - 30, width, menu_height + 30}
+    // The menu sits 6pt above the button, the gap counts as part of it for the clicks
+    MENU_RADIUS :: 12
+    MENU_PAD :: 4 // above the first option and below the last one, part of them and their highlight
+    menu_height := f32(len(options) * 24) + 2 * MENU_PAD
+    menu_bounds := Rect{position.x, position.y - menu_height - 6, width, menu_height + 6}
 
     mouse_point := mouse_position()
 
@@ -439,19 +441,28 @@ gui_dropdown :: proc(
 
     // Draw the dropdown menu
     if edit_mode {
-        menu_position := [2]f32{position.x, position.y - menu_height - 30}
+        menu_position := [2]f32{menu_bounds.x, menu_bounds.y}
 
-        // Options with a 12pt rounded margin above and below
-        draw_rounded_rect({menu_position.x, menu_position.y, width, menu_height + 24}, 12, pill_dark)
+        draw_rounded_rect({menu_position.x, menu_position.y, width, menu_height}, MENU_RADIUS, pill_dark)
         // debug
         // draw_rect_lines(menu_bounds, 1.0, ORANGE)
 
         for opt, i in options {
+            first, last := i == 0, i == len(options) - 1
+            text_y := menu_position.y + MENU_PAD + f32(i * 24) + 4
+
             option_bounds := Rect {
                 menu_position.x,
-                menu_position.y + 12 + f32(i * 24),
+                menu_position.y + MENU_PAD + f32(i * 24),
                 width,
                 24,
+            }
+            if first {
+                option_bounds.y -= MENU_PAD
+                option_bounds.height += MENU_PAD
+            }
+            if last {
+                option_bounds.height += MENU_PAD
             }
 
             hover := false
@@ -466,14 +477,23 @@ gui_dropdown :: proc(
             }
 
             if hover {
-                draw_rect(
-                    {option_bounds.x, option_bounds.y},
-                    {option_bounds.width, option_bounds.height},
-                    hex(0x15141BFF),
-                )
+                // The highlight follows the menu's corners on the first and the last option: rounded all
+                // around, then the side facing the other options squared off
+                highlight := hex(0x15141BFF)
+                square := [2]f32{option_bounds.width, option_bounds.height - MENU_RADIUS}
+
+                if first || last {
+                    draw_rounded_rect(option_bounds, MENU_RADIUS, highlight)
+                }
+                if !first {
+                    draw_rect({option_bounds.x, option_bounds.y}, square, highlight)
+                }
+                if !last {
+                    draw_rect({option_bounds.x, option_bounds.y + MENU_RADIUS}, square, highlight)
+                }
             }
 
-            text_pos := [2]f32{option_bounds.x + 12, option_bounds.y + 4}
+            text_pos := [2]f32{option_bounds.x + 12, text_y}
             label := strings.cut(opt.label, 0, max_text_len)
             draw_label(pixel_fonts.label, fmt.ctprintf("%s", label), text_pos, hex(0xFFFFFFFF) if hover else text_color_light, 1)
         }
