@@ -118,14 +118,14 @@ gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
     label_width := measure_label(pixel_fonts.label, LABEL, 1).x
     draw_label(pixel_fonts.label, LABEL, {label_x, label_top}, text_color_white if on else text_color_light, 1)
 
-    // − and the key and + under the label, lined up with its left edge
+    // − and the key and + under the label, the key centred under the LED and the label together
     font := pixel_fonts.stepper
-    minus_x := label_x
     minus_size := measure_label(font, "−")
     plus_size := measure_label(font, "+")
     key_size := measure_label(font, keys[transpose])
-    key_center := minus_x + minus_size.x + KEY_SLOT / 2
-    plus_x := minus_x + minus_size.x + KEY_SLOT
+    key_center := math.round((pos.x + label_x + label_width) / 2)
+    minus_x := key_center - KEY_SLOT / 2 - minus_size.x
+    plus_x := key_center + KEY_SLOT / 2
     text_y := pos.y - key_size.y / 2
     draw_label(font, "−", {minus_x, text_y}, text_color_light)
     draw_label(font, keys[transpose], {key_center - key_size.x / 2, text_y}, text_color_white)
@@ -146,9 +146,10 @@ gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
     return transpose
 }
 
-// From the top of the transpose label to the middle of the stepper under it, further from its value than the
-// readout's labels so a tap on the + doesn't reach the label
-TRANSPOSE_LABEL_TOP :: 1.5 * READOUT_VALUE_Y + STEPPER_SIZE / 2
+// From the top of the transpose label to the middle of the stepper under it, much further from its value
+// than the readout's labels so a tap on the + doesn't reach the label
+TRANSPOSE_LABEL_TOP :: LABEL_SIZE + TRANSPOSE_GAP + STEPPER_SIZE / 2
+TRANSPOSE_GAP :: 20 // between the label and the stepper
 
 
 // A partial without the ×, the fifth as 1½ like the 1 1½ 2 preset

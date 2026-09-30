@@ -277,7 +277,7 @@ gui_track_settings :: proc(
     }
 
     {
-        // Not a row: in the bottom left corner of the sheet with no label or line and smaller than the
+        // Not a row: centred at the bottom of the sheet with no label or line and smaller than the
         // controls, these change the strobe and not the track above. Added and removed on top, a new track
         // follows the next whole partial above the one under it, the 1½ fifth is only for picking by hand
         count, top := 0, 0
@@ -288,10 +288,12 @@ gui_track_settings :: proc(
         }
         GAP :: 8
         height: f32 = 28
-        pos := [2]f32{l.rows.x, l.bottom - height}
-        remove, remove_width := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
+        remove_width := icon_button_width("Remove")
+        width := remove_width + GAP + icon_button_width("Add")
+        pos := [2]f32{l.rows.x + math.round((l.width - width) / 2), l.bottom - height}
+        remove := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
         pos.x += remove_width + GAP
-        add, _ := gui_icon_button(pos, height, ICON_PLUS, "Add", count < MAX_TRACKS && top + 1 < MAX_INTERVALS)
+        add := gui_icon_button(pos, height, ICON_PLUS, "Add", count < MAX_TRACKS && top + 1 < MAX_INTERVALS)
         if add {
             partials := TRACK_PARTIALS
             config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, partials[len(partials) - 1])
@@ -379,27 +381,33 @@ gui_icon_button :: proc(
     icon: cstring,
     label: cstring,
     enabled := true,
-) -> (
-    clicked: bool,
-    width: f32,
-) {
-    PADDING :: 10
-    GAP :: 5
-    width =PADDING + ICON_SIZE + GAP + measure_label(pixel_fonts.label, label, 1).x + PADDING
-    rect := Rect{pos.x, pos.y, width, height}
+) -> bool {
+    rect := Rect{pos.x, pos.y, icon_button_width(label), height}
 
     held := enabled && gui_button_held(touch_area(rect))
     draw_pill(rect, pill_gray if held else pill_dark)
-    draw_icon(icon, pos + {PADDING, (height - ICON_SIZE) / 2}, icon_color if enabled else text_color_disabled)
+    draw_icon(
+        icon,
+        pos + {ICON_BUTTON_PADDING, (height - ICON_SIZE) / 2},
+        icon_color if enabled else text_color_disabled,
+    )
     draw_label(
         pixel_fonts.label,
         label,
-        pos + {PADDING + ICON_SIZE + GAP, (height - LABEL_SIZE) / 2},
+        pos + {ICON_BUTTON_PADDING + ICON_SIZE + ICON_BUTTON_GAP, (height - LABEL_SIZE) / 2},
         text_color_white if enabled else text_color_disabled,
         1,
     )
 
-    return enabled && gui_button(touch_area(rect)), width
+    return enabled && gui_button(touch_area(rect))
+}
+
+ICON_BUTTON_PADDING :: 10 // left of the icon and right of the label
+ICON_BUTTON_GAP :: 5 // between the icon and the label
+
+// How wide gui_icon_button draws the label, to lay a few of them out before drawing
+icon_button_width :: proc(label: cstring) -> f32 {
+    return 2 * ICON_BUTTON_PADDING + ICON_SIZE + ICON_BUTTON_GAP + measure_label(pixel_fonts.label, label, 1).x
 }
 
 
