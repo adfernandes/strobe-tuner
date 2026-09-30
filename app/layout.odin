@@ -137,6 +137,7 @@ SettingsLayout :: struct {
     rows:       [2]f32, // top left of the first row
     width:      f32,
     row_height: f32, // the controls are SETTINGS_CONTROL_MARGIN shorter at the top and bottom
+    bottom:     f32, // as far from the home indicator as the rows are from the sides, for what sits under the rows
 }
 
 SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
@@ -166,6 +167,7 @@ compute_settings_layout :: proc(
     height = max(height, window.y - (strobe.y + strobe.height))
     height = min(height, window.y - safe.y)
     l.sheet = {0, window.y - open * height, window.x, height}
+    l.bottom = l.sheet.y + height - (window.y - (safe.y + safe.height)) - PANEL_PADDING
 
     top := l.sheet.y + PANEL_PADDING
     l.title = {left, top}

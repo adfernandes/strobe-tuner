@@ -34,6 +34,7 @@ text_color_dark := hex(0x15141BFF)
 text_color_light := hex(0xBDBDBDFF)
 text_color_white := hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
 text_color_muted := hex(0x7D7E8FFF) // the note and readout without a pitch, the ruler's neighbours
+text_color_disabled := hex(0x5C5D6AFF) // a control that does nothing right now, on a dark pill
 icon_color := hex(0x9A9BAAFF)
 
 // Buttons
@@ -486,8 +487,8 @@ ReadoutAlign :: enum {
     CENTER, // pos is the top middle of the gutter, Hz right aligned before it and cents left aligned after it
 }
 
-// Two columns, Hz and cents. Centred, the minus hangs into the gutter so the pair looks centred whatever
-// the digits.
+// Two columns, Hz and cents. Centred, the sign of the cents hangs into the gutter so the pair looks centred
+// whatever the digits.
 draw_measurements :: proc(
     pos: [2]f32,
     align: ReadoutAlign,
@@ -506,7 +507,9 @@ draw_measurements :: proc(
     label_font := pixel_fonts.label.font
     hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
     cents_str := "-" if show_placeholder else fmt.ctprintf("%.1f", math.abs(cents))
-    minus := !show_placeholder && cents < 0 && cents_str != "0.0"
+    // No sign on a rounded zero
+    sign: cstring = "-" if cents < 0 else "+"
+    signed := !show_placeholder && cents_str != "0.0"
 
     switch align {
     case .CENTER:
@@ -517,7 +520,7 @@ draw_measurements :: proc(
         cents_left := pos + {READOUT_GUTTER / 2, 0}
         draw_text(label_font, "Cents", snap_to_pixels(cents_left), pixel_fonts.label.size, 1, text_color_muted)
         draw_text(value.font, cents_str, snap_to_pixels(cents_left + {0, VALUE_Y}), value.size, 0, color)
-        if minus do draw_text_right(value.font, "-", cents_left + {-2, VALUE_Y}, value.size, 0, color)
+        if signed do draw_text_right(value.font, sign, cents_left + {-2, VALUE_Y}, value.size, 0, color)
     case .RIGHT:
         hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
         draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
@@ -525,12 +528,12 @@ draw_measurements :: proc(
 
         draw_text_right(label_font, "Cents", pos, pixel_fonts.label.size, 1, text_color_muted)
         width := draw_text_right(value.font, cents_str, pos + {0, VALUE_Y}, value.size, 0, color)
-        // The minus hangs to the left of the number
-        if minus do draw_text_right(value.font, "-", pos + {-width - 2, VALUE_Y}, value.size, 0, color)
+        // The sign hangs to the left of the number
+        if signed do draw_text_right(value.font, sign, pos + {-width - 2, VALUE_Y}, value.size, 0, color)
     }
 }
 
-// Between the columns of the centred readout, room for the minus
+// Between the columns of the centred readout, room for the sign
 READOUT_GUTTER :: 40
 
 // From the top of the labels to the top of the values

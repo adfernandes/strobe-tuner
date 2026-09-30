@@ -127,7 +127,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
         note_sharp      = load(noto_sans_mono, ruler_scale * RULER_NOTE_SHARP_SIZE, scale, "♯"),
         neighbour_sharp = load(noto_sans_mono, ruler_scale * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
-        readout         = load(inter_medium, ruler_scale * READOUT_SIZE, scale, "0123456789.-"),
+        readout         = load(inter_medium, ruler_scale * READOUT_SIZE, scale, "0123456789.-+"),
         note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
     }

@@ -623,3 +623,59 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
         testing.expect(t, diff < 0)
     }
 }
+
+
+// How fast the wheel turns for a steady detuning, against what the lock-in phase should give:
+// TAU * STROBE_REFERENCE_HZ * (2^(cents / 1200) - 1) * speed, in radians of the wheel per second.
+@(test)
+test_strobe_turn_rate :: proc(t: ^testing.T) {
+    SAMPLERATE :: 48_000
+    FRAME :: 800 // samples per display frame at 60 FPS
+    BASE_SPEED :: 0.0125
+
+    // Radians of the wheel per second, over the last of 3 seconds
+    run :: proc(target_hz: f32, detune_cents: f32, speed_scale: f32) -> f32 {
+        intervals := []f32{1}
+        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC_MODE, 10)
+        defer destroy_phase_comparator(pc)
+        set_phase_comparator_tracks(pc, intervals, {0}, {speed_scale})
+        set_phase_comparator_freq(pc, target_hz, 440, BASE_SPEED, 2, .HARMONIC_MODE)
+
+        freq := f64(cents_to_freq(detune_cents, target_hz))
+        chunk: [FRAME]f32
+        n := 0
+        frames_per_s := SAMPLERATE / FRAME
+        start: f32
+        for frame in 0 ..< 3 * frames_per_s {
+            if frame == 2 * frames_per_s do start = pc.bands[0].scaled_phase
+            for &s in chunk {
+                s = f32(0.1 * math.sin(math.TAU * freq * f64(n) / SAMPLERATE))
+                n += 1
+            }
+            audio_capture_callback(pc, chunk[:])
+            run_phase_detection(pc, false)
+        }
+        return start - pc.bands[0].scaled_phase
+    }
+
+    // Up to the edge of the note. Further out the string is outside the band's window (25 cents a bin) and
+    // the tracker has nothing to follow.
+    for target_hz in ([]f32{82.41, 329.63}) {
+        for speed_scale in ([]f32{0.25, 1}) {
+            for cents in ([]f32{1, 5, 10, 25, 50, -50}) {
+                rate := run(target_hz, cents, speed_scale)
+                ideal := math.TAU * STROBE_REFERENCE_HZ * (math.pow(2, cents / 1200) - 1) * BASE_SPEED * speed_scale
+                testing.expectf(
+                    t,
+                    abs(rate - ideal) < 0.02 * abs(ideal),
+                    "%v Hz at %v cents and speed %v, got %v rad/s, expected %v",
+                    target_hz,
+                    cents,
+                    speed_scale,
+                    rate,
+                    ideal,
+                )
+            }
+        }
+    }
+}

@@ -167,7 +167,7 @@ gui_settings :: proc(
 // A track's own sheet, opened by tapping it on the strobe in harmonic mode. Shorter than the settings so the
 // strobe stays in sight while the track is tuned. Returns close when ✕ is tapped, changed when the strobe
 // needs updating.
-TRACK_SETTINGS_ROWS :: 5
+TRACK_SETTINGS_ROWS :: 5 // the last is room for the buttons that add and remove tracks
 
 // The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
 TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
@@ -277,22 +277,26 @@ gui_track_settings :: proc(
     }
 
     {
-        // Added and removed on top, a new track follows the next whole partial above the one under it,
-        // the 1½ fifth is only for picking by hand
-        rect := settings_row(l, row, "Tracks", 176)
-        row += 1
+        // Not a row: in the bottom left corner of the sheet with no label or line and smaller than the
+        // controls, these change the strobe and not the track above. Added and removed on top, a new track
+        // follows the next whole partial above the one under it, the 1½ fifth is only for picking by hand
         count, top := 0, 0
         for interval, i in config.strobe_intervals {
             if interval < 1 do continue
             count += 1
             top = i
         }
-        steps, _ := gui_stepper_buttons(rect, fmt.ctprintf("%d", count))
-        if steps > 0 && count < MAX_TRACKS && top + 1 < MAX_INTERVALS {
+        GAP :: 8
+        height: f32 = 28
+        pos := [2]f32{l.rows.x, l.bottom - height}
+        remove, remove_width := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
+        pos.x += remove_width + GAP
+        add, _ := gui_icon_button(pos, height, ICON_PLUS, "Add", count < MAX_TRACKS && top + 1 < MAX_INTERVALS)
+        if add {
             partials := TRACK_PARTIALS
             config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, partials[len(partials) - 1])
             changed = true
-        } else if steps < 0 && count > 1 {
+        } else if remove {
             config.strobe_intervals[top] = 0
             // Cleared so a track added there later starts fresh
             config.strobe_offsets_cents[top] = 0
@@ -365,6 +369,37 @@ settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_widt
 // The pills are slimmer than a finger, taps anywhere in the height of their row count
 touch_area :: proc(rect: Rect) -> Rect {
     return {rect.x, rect.y - SETTINGS_CONTROL_MARGIN, rect.width, rect.height + 2 * SETTINGS_CONTROL_MARGIN}
+}
+
+
+// A narrow pill as wide as its icon and label, pos is its top left. Dimmed and dead when not enabled.
+gui_icon_button :: proc(
+    pos: [2]f32,
+    height: f32,
+    icon: cstring,
+    label: cstring,
+    enabled := true,
+) -> (
+    clicked: bool,
+    width: f32,
+) {
+    PADDING :: 10
+    GAP :: 5
+    width =PADDING + ICON_SIZE + GAP + measure_label(pixel_fonts.label, label, 1).x + PADDING
+    rect := Rect{pos.x, pos.y, width, height}
+
+    held := enabled && gui_button_held(touch_area(rect))
+    draw_pill(rect, pill_gray if held else pill_dark)
+    draw_icon(icon, pos + {PADDING, (height - ICON_SIZE) / 2}, icon_color if enabled else text_color_disabled)
+    draw_label(
+        pixel_fonts.label,
+        label,
+        pos + {PADDING + ICON_SIZE + GAP, (height - LABEL_SIZE) / 2},
+        text_color_white if enabled else text_color_disabled,
+        1,
+    )
+
+    return enabled && gui_button(touch_area(rect)), width
 }
 
 
