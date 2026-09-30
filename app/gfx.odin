@@ -83,6 +83,7 @@ Key :: enum {
     COMMA,
     ESCAPE,
     G,
+    H,
     I,
     R,
     X,

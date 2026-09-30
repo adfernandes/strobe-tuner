@@ -80,7 +80,7 @@ strobe_density :: proc(half_width, radius: f32) -> f32 {
 }
 
 // The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
-// a taller rect only extends the background upwards (e.g. behind the notch). Not ok for the trace.
+// a taller rect only extends the background upwards (e.g. behind the notch). Not ok for the trace and the scope's views.
 strobe_geometry :: proc(
     display_type: StrobeDisplayType,
     rect: Rect,
@@ -102,7 +102,7 @@ strobe_geometry :: proc(
             g.band_height = 50.0
         }
         g.period_count = DESKTOP_TRACKS_PERIODS
-    case .TRACE:
+    case .TRACE, .SCOPE, .RIBBON:
         return {}, false
     }
     g.curvature_radius *= scale

@@ -131,6 +131,12 @@ run_app :: proc(config: ^Config) {
 
     register_audio_node(audio_capture, &pitch_detector)
     register_audio_node(audio_capture, phase_comparator)
+
+    // The scope and the ribbon display types
+    scope := core.init_scope(f64(config.samplerate), SCOPE_COLUMNS, SCOPE_ROWS)
+    defer core.destroy_scope(&scope)
+    register_audio_node(audio_capture, &scope)
+
     start_audio_capture(audio_capture)
 
     retune(phase_comparator, target_freq_hz, config)
@@ -260,6 +266,15 @@ run_app :: proc(config: ^Config) {
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
         core.run_phase_detection(phase_comparator, config.use_phase_average, pitch_info.is_tonal)
 
+        when DEBUG_STATS do scope_keys(config)
+
+        // The strobe's frequency, not the target note's: that one jumps an octave with the detection
+        // while the strobe stays, and every change starts with a dark screen
+        if scope.freq_hz != f64(phase_comparator.base_freq_hz) {
+            core.set_scope_freq(&scope, f64(phase_comparator.base_freq_hz))
+        }
+        scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
+        core.update_scope(&scope)
 
         if key_pressed(.TAB) {
             config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
@@ -328,6 +343,12 @@ run_app :: proc(config: ^Config) {
                 draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, hex(strobe_bg_color))
                 colors := get_strobe_colors(config)
                 draw_cents_trace(&cents_trace, trace_rect, hex(colors.x), hex(colors.y), hex(strobe_bg_color))
+            } else if config.strobe_display_type == .SCOPE || config.strobe_display_type == .RIBBON {
+                scope_rect := layout.strobe
+                scope_rect.y = layout.strobe_top
+                scope_rect.height -= layout.strobe_top
+                draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, hex(strobe_bg_color))
+                draw_scope_display(&strobe_display, &scope, scope_rect, config)
             } else {
                 // TODO
                 // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
@@ -453,8 +474,8 @@ run_app :: proc(config: ^Config) {
             // -------------------------------------------------------------------------------------
 
 
-            // Only the strobe spins, the trace has no speed to change
-            if config.strobe_display_type != .TRACE {
+            // Only the strobe spins, the trace and the scope's views have no speed to change
+            if config.strobe_display_type == .CURVED_TRACKS || config.strobe_display_type == .SPINNING_WHEEL {
                 if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
                     config.strobe_speed = speed
                     core.set_phase_comparator_speed(phase_comparator, speed)

@@ -46,6 +46,7 @@ when RENDERER == "raylib" {
         .COMMA       = .COMMA,
         .ESCAPE      = .ESCAPE,
         .G           = .G,
+        .H           = .H,
         .I           = .I,
         .R           = .R,
         .X           = .X,

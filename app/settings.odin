@@ -89,8 +89,9 @@ gui_settings :: proc(
     }
 
     {
-        labels := []cstring{"Tracks", "Wheel", "Trace"}
-        rect := settings_row(l, row, "Display", f32(len(labels)) * SEGMENT_WIDTH)
+        // Five of them, narrower than the other rows' to fit a phone
+        labels := []cstring{"Tracks", "Wheel", "Trace", "Scope", "Ribbon"}
+        rect := settings_row(l, row, "Display", f32(len(labels)) * 54)
         row += 1
         if i, ok := gui_segmented(rect, labels, int(config.strobe_display_type)); ok {
             config.strobe_display_type = StrobeDisplayType(i)
@@ -98,8 +99,8 @@ gui_settings :: proc(
     }
 
     {
-        labels := []cstring{"Red", "Mint", "Amber"}
-        rect := settings_row(l, row, "Colors", 3 * SEGMENT_WIDTH)
+        labels := []cstring{"Red", "Mint", "Amber", "Mono"}
+        rect := settings_row(l, row, "Colors", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
         if i, ok := gui_segmented(rect, labels, int(config.strobe_colorway)); ok {
             config.strobe_colorway = StrobeColorway(i)

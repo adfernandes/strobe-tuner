@@ -20,6 +20,7 @@ StrobeColorway :: enum {
     VIBRANT_RED,
     MINTY,
     AMBER,
+    MONO,
 }
 
 
@@ -28,6 +29,9 @@ minty: [2]u32 : {0xB5F2DBFF, 0x6B3D7DFF}
 vibrant_red: [2]u32 : {0xFF6767FF, 0x6B4949FF}
 
 amber: [2]u32 : {0xFF9A4DFF, 0x6B4A38FF}
+
+// Black and white, the most contrast and no hue to tell apart
+mono: [2]u32 : {0xF2F1ECFF, 0x55565EFF}
 
 
 // Lamp glow on the strobe, the lamp-lit look of the old mechanical strobe tuners, toggled with G.
@@ -47,6 +51,9 @@ get_glow_params :: proc(config: ^Config) -> GlowParams {
         return {color = 0x7DF2C4FF, dark_color = minty[1], exposure = 3.0, saturation = 1.0}
     case .AMBER:
         return {color = 0xFF803CFF, dark_color = 0xFF803CFF, exposure = 4.5, saturation = 0.8}
+    case .MONO:
+        // The warm white of a bulb
+        return {color = 0xFFE2B8FF, dark_color = 0xFFE2B8FF, exposure = 3.5, saturation = 0.8}
     }
     return {}
 }
@@ -59,6 +66,8 @@ get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
         return minty
     case .AMBER:
         return amber
+    case .MONO:
+        return mono
     }
     return vibrant_red
 }

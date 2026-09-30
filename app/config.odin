@@ -42,6 +42,8 @@ StrobeDisplayType :: enum {
     CURVED_TRACKS,
     SPINNING_WHEEL,
     TRACE, // a line of the cents over the last few seconds
+    SCOPE, // the wave itself, like an oscilloscope synced to the strobe's frequency, see core/scope.odin
+    RIBBON, // the scope from above, stripes as bright as the wave is high, the classic strobe
 }
 
 
@@ -113,6 +115,12 @@ Config :: struct {
 
     // Show cents offset for each strobe band
     show_band_cents:              bool,
+
+    // Scope and ribbon displays: how long the beam stays on the screen, 0 shows only what came in since
+    // the previous frame
+    scope_persistence_ms:         f32,
+    // what the ribbon shows, the positive half of the wave like a lamp or the wave as it is
+    ribbon_shape:                 core.ScopeShape,
 }
 
 config_defaults :: Config {
@@ -144,6 +152,8 @@ config_defaults :: Config {
     highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower it for bass
     use_phase_average            = true,
     show_band_cents              = false,
+    scope_persistence_ms         = 40,
+    ribbon_shape                 = .HALF_RECTIFIED,
 }
 
 
